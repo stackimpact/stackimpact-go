@@ -40,9 +40,9 @@ agent.Configure("agent key here", "MyGoApp")
 ```
 
 Other initialization options are:
-* `DashboardAddress` (Optional) Used by on-premises deployments only.
-* `HostName` (Optional) By default host name will be the OS hostname.
-* `Debug` (Optional) Enables debug logging.
+* `agent.DashboardAddress` (Optional) Used by on-premises deployments only.
+* `agent.HostName` (Optional) By default host name will be the OS hostname.
+* `agent.Debug` (Optional) Enables debug logging.
 
 
 #### Analyzing performance data in the Dashboard
