@@ -60,6 +60,18 @@ func (br *BlockReporter) report(trigger string) {
 	events := br.readTraceProfile(duration)
 	br.agent.log("Trace profiler stopped.")
 
+	// channels
+	if callGraph, err := br.createBlockCallGraph(events, pprofTrace.EvGoBlockRecv, nil, duration); err != nil {
+		br.agent.error(err)
+	} else {
+		// filter calls with lower than 1ms waiting time
+		callGraph.filter(1, math.Inf(0))
+
+		metric := newMetric(br.agent, TypeProfile, CategoryChannelProfile, NameChannelWaitTime, UnitMillisecond)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+
 	// network
 	filter := func(funcName string) bool {
 		return !strings.Contains(funcName, "AcceptTCP")
@@ -70,7 +82,7 @@ func (br *BlockReporter) report(trigger string) {
 		// filter calls with lower than 1ms waiting time
 		callGraph.filter(1, math.Inf(0))
 
-		metric := newMetric(br.agent, TypeProfile, CategoryNetworkProfile, NameWaitTime, UnitMillisecond)
+		metric := newMetric(br.agent, TypeProfile, CategoryNetworkProfile, NameNetworkWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
@@ -82,7 +94,7 @@ func (br *BlockReporter) report(trigger string) {
 		// filter calls with lower than 1ms waiting time
 		callGraph.filter(1, math.Inf(0))
 
-		metric := newMetric(br.agent, TypeProfile, CategorySystemProfile, NameWaitTime, UnitMillisecond)
+		metric := newMetric(br.agent, TypeProfile, CategorySystemProfile, NameSystemWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
@@ -94,7 +106,7 @@ func (br *BlockReporter) report(trigger string) {
 		// filter calls with lower than 1ms waiting time
 		callGraph.filter(1, math.Inf(0))
 
-		metric := newMetric(br.agent, TypeProfile, CategoryLockProfile, NameWaitTime, UnitMillisecond)
+		metric := newMetric(br.agent, TypeProfile, CategoryLockProfile, NameLockWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}

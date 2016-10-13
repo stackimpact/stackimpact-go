@@ -15,6 +15,7 @@ const CategoryGC string = "gc"
 const CategoryRuntime string = "runtime"
 const CategoryCPUProfile string = "cpu-profile"
 const CategoryMemoryProfile string = "memory-profile"
+const CategoryChannelProfile string = "channel-profile"
 const CategoryNetworkProfile string = "network-profile"
 const CategorySystemProfile string = "system-profile"
 const CategoryLockProfile string = "lock-profile"
@@ -31,8 +32,11 @@ const NameHeapObjects string = "Heap objects"
 const NameGCTotalPause string = "GC total pause"
 const NameNumGC string = "Number of GCs"
 const NameGCCPUFraction string = "GC CPU fraction"
-const NameWaitTime string = "Wait time"
 const NameAllocatedSize string = "Allocated size"
+const NameChannelWaitTime string = "Channel wait time"
+const NameNetworkWaitTime string = "Network wait time"
+const NameSystemWaitTime string = "System wait time"
+const NameLockWaitTime string = "Lock wait time"
 
 const UnitNone string = ""
 const UnitMillisecond string = "millisecond"
@@ -144,7 +148,7 @@ type Metric struct {
 }
 
 func newMetric(agent *Agent, typ string, category string, name string, unit string) *Metric {
-	metricID := sha1String(agent.AppName + agent.HostName + typ + category + name)
+	metricID := sha1String(agent.AppName + agent.HostName + typ + category + name + unit)
 
 	m := &Metric{
 		agent:        agent,

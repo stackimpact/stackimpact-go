@@ -84,6 +84,31 @@ func simulateMemoryLeak() {
 	go leakMemory(60, 10)
 }
 
+
+func simulateChannelWait() {
+	for {
+		done := make(chan bool)
+
+		go func() {
+			wait := make(chan bool)
+
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+
+				wait <- true
+			}()
+
+			<-wait
+
+			done <- true
+		}()
+
+		<-done
+
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 func simulateNetworkWait() {
 	// start test server
 	go func() {
@@ -175,6 +200,7 @@ func main() {
 
 	go simulateCPUUsage()
 	go simulateMemoryLeak()
+	go simulateChannelWait()
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
