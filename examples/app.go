@@ -49,7 +49,7 @@ func leakMemory(duration int, size int) {
 
 	for j := 0; j < duration; j++ {
 		go func() {
-			for i := 0; i < size/duration*50000; i++ {
+			for i := 0; i < size; i++ {
 				mem = append(mem, string(i))
 			}
 		}()
@@ -59,29 +59,18 @@ func leakMemory(duration int, size int) {
 }
 
 func simulateMemoryLeak() {
-	// simulate memory leak - every 30 minutes
-	anomalyTicker := time.NewTicker(30 * time.Minute)
-	go func() {
-		for {
-			select {
-			case <-anomalyTicker.C:
-				leakMemory(60, 100)
-			}
-		}
-	}()
-
 	// simulate memory leak - constantly
-	constantTicker := time.NewTicker(60 * time.Second)
+	constantTicker := time.NewTicker(2 * 3600 * time.Second)
 	go func() {
 		for {
 			select {
 			case <-constantTicker.C:
-				leakMemory(60, 10)
+				leakMemory(2 * 3600, 1000)
 			}
 		}
 	}()
 
-	go leakMemory(60, 10)
+	go leakMemory(2 * 3600, 1000)
 }
 
 
