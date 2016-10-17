@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"math/rand"
 
 	"github.com/stackimpact/stackimpact-go"
 )
@@ -98,11 +99,19 @@ func simulateChannelWait() {
 	}
 }
 
+
 func simulateNetworkWait() {
-	// start test server
+	// start HTTP server
 	go func() {
 		http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(500 * time.Millisecond)
+			done := make(chan bool)
+
+			go func() {
+				time.Sleep(time.Duration(rand.Intn(400)) * time.Millisecond)
+				done <- true
+			}()
+			<-done
+
 			fmt.Fprintf(w, "OK")
 		})
 
@@ -112,25 +121,19 @@ func simulateNetworkWait() {
 		}
 	}()
 
+
+	requestTicker := time.NewTicker(500 * time.Millisecond)
 	for {
-		done := make(chan bool)
-
-		go func() {
+		select {
+		case <-requestTicker.C:
 			res, err := http.Get("http://localhost:5000/test")
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				defer res.Body.Close()
+			if err == nil {
+				res.Body.Close()
 			}
-
-			done <- true
-		}()
-
-		time.Sleep(500 * time.Millisecond)
-
-		<-done
+		}
 	}
 }
+
 
 func simulateSyscallWait() {
 	for {
@@ -174,6 +177,7 @@ func simulateLockWait() {
 		time.Sleep(500 * time.Millisecond)
 	}
 }
+
 
 func main() {
 	// StackImpact initialization

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.0.3"
+const AgentVersion = "1.0.4"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 type Agent struct {

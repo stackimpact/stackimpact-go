@@ -54,14 +54,17 @@ func (br *BlockReporter) report(trigger string) {
 		return
 	}
 
+	var selectedEvents []*pprofTrace.Event
+	var filterFunc filterFuncType
 	duration := int64(5000)
 
 	br.agent.log("Starting trace profiler for %v milliseconds...", duration)
-	events := br.readTraceProfile(duration)
+	events := br.readTraceEvents(duration)
 	br.agent.log("Trace profiler stopped.")
 
 	// channels
-	if callGraph, err := br.createBlockCallGraph(events, pprofTrace.EvGoBlockRecv, nil, duration); err != nil {
+	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockRecv)
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		// filter calls with lower than 1ms waiting time
@@ -73,10 +76,11 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// network
-	filter := func(funcName string) bool {
+	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockNet)
+	filterFunc = func(funcName string) bool {
 		return !strings.Contains(funcName, "AcceptTCP")
 	}
-	if callGraph, err := br.createBlockCallGraph(events, pprofTrace.EvGoBlockNet, filter, duration); err != nil {
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, filterFunc, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		// filter calls with lower than 1ms waiting time
@@ -88,7 +92,8 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// system
-	if callGraph, err := br.createBlockCallGraph(events, pprofTrace.EvGoSysCall, nil, duration); err != nil {
+	selectedEvents = selectEventsByType(events, pprofTrace.EvGoSysCall)
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		// filter calls with lower than 1ms waiting time
@@ -100,7 +105,8 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// locks
-	if callGraph, err := br.createBlockCallGraph(events, pprofTrace.EvGoBlockSync, nil, duration); err != nil {
+	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockSync)
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		// filter calls with lower than 1ms waiting time
@@ -110,18 +116,120 @@ func (br *BlockReporter) report(trigger string) {
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+
+	// traces
+	entryFilterFunc := func(funcName string) bool {
+		return strings.Contains(funcName, "net/http.(*Server).Serve")
+	}
+	traceList := newBreakdownNode("root")
+	eventIndex := br.nextEntry(events, entryFilterFunc, 0)
+	i := 0
+	for eventIndex >= 0 && i < 250 {
+		i++
+
+		entry := events[eventIndex]
+
+		selectedEvents = selectEventsByTrace(entry)
+		if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, 1000); err != nil {
+			br.agent.error(err)
+			break
+		} else {
+			callGraph.name = fmt.Sprintf("[Sample %v]", selectedEvents[0].Ts)
+
+			// filter calls with lower than 1ms waiting time
+			callGraph.filter(1, math.Inf(0))
+
+			br.appendToTraceList(traceList, callGraph, 10)
+		}
+
+		eventIndex = br.nextEntry(events, entryFilterFunc, eventIndex+1)
+	}
+
+	if len(traceList.children) > 0 {
+		traceList.measurement = traceList.maxChild().measurement
+
+		metric := newMetric(br.agent, TypeTrace, CategoryHTTPTrace, NameHTTPTransactions, UnitMillisecond)
+		metric.createMeasurement(trigger, traceList.measurement, traceList)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+}
+
+func (br *BlockReporter) appendToTraceList(traceList *BreakdownNode, callGraph *BreakdownNode, max int) {
+	if len(traceList.children) < max {
+		traceList.addChild(callGraph)
+	} else {
+		minChild := traceList.minChild()
+		if minChild.measurement < callGraph.measurement {
+			traceList.removeChild(minChild)
+			traceList.addChild(callGraph)
+		}
+	}
+}
+
+func (br *BlockReporter) nextEntry(events []*pprofTrace.Event, entryFilterFunc filterFuncType, startIndex int) int {
+	events = events[startIndex:]
+	for i, ev := range events {
+		if ev.Link == nil || ev.StkID == 0 || len(ev.Stk) == 0 {
+			continue
+		}
+		if ev.Type == pprofTrace.EvGoCreate {
+			if ev.Stk[0] != nil && entryFilterFunc(ev.Stk[0].Fn) {
+				return startIndex + i
+			}
+		}
+	}
+
+	return -1
+}
+
+func selectEventsByTrace(event *pprofTrace.Event) []*pprofTrace.Event {
+	selected := make([]*pprofTrace.Event, 0)
+
+	ev := event
+	i := 0
+	for i < 250 && ev != nil {
+		i++
+
+		switch ev.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+			if ev.StkID != 0 && len(ev.Stk) > 0 {
+				selected = append(selected, ev)
+			}
+		}
+
+		ev = ev.Link
+	}
+
+	return selected
+}
+
+func selectEventsByType(events []*pprofTrace.Event, eventType byte) []*pprofTrace.Event {
+	selected := make([]*pprofTrace.Event, 0)
+	for _, ev := range events {
+		if ev.Type == eventType {
+			selected = append(selected, ev)
+		}
+	}
+	return selected
 }
 
 func (br *BlockReporter) createBlockCallGraph(
 	events []*pprofTrace.Event,
-	eventType byte,
 	filterFunc filterFuncType,
 	duration int64) (*BreakdownNode, error) {
 	seconds := int64(duration / 1000)
 
 	prof := make(map[uint64]Record)
 	for _, ev := range events {
-		if ev.Type != eventType || ev.Link == nil || ev.StkID == 0 || len(ev.Stk) == 0 {
+		if ev.Link == nil || ev.StkID == 0 || len(ev.Stk) == 0 {
 			continue
 		}
 
@@ -173,7 +281,7 @@ func (br *BlockReporter) createBlockCallGraph(
 	return rootNode, nil
 }
 
-func (br *BlockReporter) readTraceProfile(duration int64) []*pprofTrace.Event {
+func (br *BlockReporter) readTraceEvents(duration int64) []*pprofTrace.Event {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 

@@ -8,6 +8,7 @@ import (
 const TypeState string = "state"
 const TypeCounter string = "counter"
 const TypeProfile string = "profile"
+const TypeTrace string = "trace"
 
 const CategoryCPU string = "cpu"
 const CategoryMemory string = "memory"
@@ -19,6 +20,7 @@ const CategoryChannelProfile string = "channel-profile"
 const CategoryNetworkProfile string = "network-profile"
 const CategorySystemProfile string = "system-profile"
 const CategoryLockProfile string = "lock-profile"
+const CategoryHTTPTrace string = "http-trace"
 
 const NameCPUTime string = "CPU time"
 const NameCPUUsage string = "CPU usage"
@@ -37,6 +39,7 @@ const NameChannelWaitTime string = "Channel wait time"
 const NameNetworkWaitTime string = "Network wait time"
 const NameSystemWaitTime string = "System wait time"
 const NameLockWaitTime string = "Lock wait time"
+const NameHTTPTransactions string = "HTTP Transactions"
 
 const UnitNone string = ""
 const UnitMillisecond string = "millisecond"
@@ -73,8 +76,32 @@ func (bn *BreakdownNode) findChild(name string) *BreakdownNode {
 	return nil
 }
 
+func (bn *BreakdownNode) maxChild() *BreakdownNode {
+	var maxChild *BreakdownNode = nil
+	for _, child := range bn.children {
+		if maxChild == nil || child.measurement > maxChild.measurement {
+			maxChild = child
+		}
+	}
+	return maxChild
+}
+
+func (bn *BreakdownNode) minChild() *BreakdownNode {
+	var minChild *BreakdownNode = nil
+	for _, child := range bn.children {
+		if minChild == nil || child.measurement < minChild.measurement {
+			minChild = child
+		}
+	}
+	return minChild
+}
+
 func (bn *BreakdownNode) addChild(child *BreakdownNode) {
 	bn.children[child.name] = child
+}
+
+func (bn *BreakdownNode) removeChild(child *BreakdownNode) {
+	delete(bn.children, child.name)
 }
 
 func (bn *BreakdownNode) findOrAddChild(name string) *BreakdownNode {
