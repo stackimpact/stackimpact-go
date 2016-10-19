@@ -11,8 +11,10 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.0.4"
+const AgentVersion = "1.0.5"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
+
+var agentConfigured bool = false
 
 type Agent struct {
 	nextId             int64
@@ -71,6 +73,12 @@ func NewAgent() *Agent {
 }
 
 func (a *Agent) Configure(agentKey string, appName string) {
+	if agentConfigured {
+		a.log("Agent configuration failed. Another agent has already been initialized.")
+		return
+	}
+	agentConfigured = true
+
 	a.AgentKey = agentKey
 	a.AppName = appName
 
