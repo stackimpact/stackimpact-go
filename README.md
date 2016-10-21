@@ -39,7 +39,7 @@ agent := stackimpact.NewAgent();
 agent.Configure("agent key here", "MyGoApp")
 ```
 
-Other initialization options are:
+Other initialization options are (set before calling Configure):
 * `agent.DashboardAddress` (Optional) Used by on-premises deployments only.
 * `agent.HostName` (Optional) By default host name will be the OS hostname.
 * `agent.Debug` (Optional) Enables debug logging.

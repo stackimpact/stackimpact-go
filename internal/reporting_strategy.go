@@ -1,4 +1,4 @@
-package stackimpact
+package internal
 
 import (
 	"math"

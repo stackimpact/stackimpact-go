@@ -1,4 +1,4 @@
-package stackimpact
+package internal
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	pprofTrace "github.com/stackimpact/stackimpact-go/pprof/trace"
+	pprofTrace "github.com/stackimpact/stackimpact-go/internal/pprof/trace"
 )
 
 type filterFuncType func(funcName string) bool

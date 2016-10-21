@@ -1,4 +1,4 @@
-package stackimpact
+package internal
 
 import (
 	"bufio"
@@ -9,7 +9,7 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/stackimpact/stackimpact-go/pprof/profile"
+	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
 )
 
 type CPUReporter struct {

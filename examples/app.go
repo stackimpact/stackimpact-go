@@ -183,13 +183,12 @@ func main() {
 	// StackImpact initialization
 	agent := stackimpact.NewAgent()
 	agent.Debug = true
-	agent.Configure(os.Getenv("AGENT_KEY"), "ExampleGoApp")
-	// end StackImpact initialization
-
 	// Overwrite dashboard (onprem only)
 	if os.Getenv("DASHBOARD_ADDRESS") != "" {
 		agent.DashboardAddress = os.Getenv("DASHBOARD_ADDRESS")
 	}
+	agent.Configure(os.Getenv("AGENT_KEY"), "ExampleGoApp")
+	// end StackImpact initialization
 
 	go simulateCPUUsage()
 	go simulateMemoryLeak()

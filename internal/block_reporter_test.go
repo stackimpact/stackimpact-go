@@ -1,4 +1,4 @@
-package stackimpact
+package internal
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	pprofTrace "github.com/stackimpact/stackimpact-go/pprof/trace"
+	pprofTrace "github.com/stackimpact/stackimpact-go/internal/pprof/trace"
 )
 
 func TestCreateBlockCallGraphWithChannel(t *testing.T) {
