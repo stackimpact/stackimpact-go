@@ -271,13 +271,20 @@ func TestCreateBlockCallGraphWithTrace(t *testing.T) {
 	}()
 
 	events := agent.blockReporter.readTraceEvents(1000)
-	/*fmt.Printf("EVENTS:\n")
-	  for _, ev := range events {
-	    for _, f := range ev.Stk {
+	/*
+	for _, ev := range events {
+		fmt.Printf("\n\n\n\nEVENTS:\n")
+		lev := ev
+		for lev != nil {
+			fmt.Printf("\n\nLINKED EVENT %v:\n", pprofTrace.EventDescriptions[lev.Type])
+			for _, f := range lev.Stk {
 	      fmt.Printf("%v (%v:%v)\n", f.Fn, f.File, f.Line)
 	    }
-	    fmt.Printf("\n")
-	  }*/
+
+			lev = lev.Link
+		}
+  }
+	*/
 
 	entryFilterFunc := func(funcName string) bool {
 		return strings.Contains(funcName, "net/http.(*Server).Serve")
@@ -309,7 +316,7 @@ func TestCreateBlockCallGraphWithTrace(t *testing.T) {
 		t.Error("Wait time is too low")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithTrace") {
+	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithTrace.func1.1") {
 		t.Error("The test function is not found in the profile")
 	}
 
