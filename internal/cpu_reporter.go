@@ -83,7 +83,7 @@ func (cr *CPUReporter) createCPUCallGraph(p *profile.Profile) (*BreakdownNode, e
 	// calculate total possible samples
 	var maxSamples int64
 	if pt := p.PeriodType; pt != nil && pt.Type == "cpu" && pt.Unit == "nanoseconds" {
-		maxSamples = p.DurationNanos / p.Period
+		maxSamples = (p.DurationNanos / p.Period) * int64(runtime.NumCPU())
 	} else {
 		return nil, errors.New("No period information in profile")
 	}

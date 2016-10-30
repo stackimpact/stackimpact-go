@@ -63,6 +63,7 @@ func (pr *ProcessReporter) report() {
 		cpuTimeMetric := pr.reportMetric(TypeCounter, CategoryCPU, NameCPUTime, UnitNanosecond, float64(cpuTime))
 		if cpuTimeMetric.hasMeasurement() {
 			cpuUsage := (float64(cpuTimeMetric.measurement.value) / float64(60*1e9)) * 100
+			cpuUsage = cpuUsage / float64(runtime.NumCPU())
 			pr.reportMetric(TypeState, CategoryCPU, NameCPUUsage, UnitPercent, float64(cpuUsage))
 		}
 	} else {
