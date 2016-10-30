@@ -34,7 +34,7 @@ And import the package `github.com/stackimpact/stackimpact-go` in your applicati
 
 Start the agent by specifying agent key and application name. The agent key can be found in your account's Configuration section.
 
-```
+```go
 agent := stackimpact.NewAgent();
 agent.Configure("agent key here", "MyGoApp")
 ```
@@ -43,6 +43,32 @@ Other initialization options are (set before calling Configure):
 * `agent.DashboardAddress` (Optional) Used by on-premises deployments only.
 * `agent.HostName` (Optional) By default host name will be the OS hostname.
 * `agent.Debug` (Optional) Enables debug logging.
+
+
+Example:
+
+```go
+package main
+
+import (
+  	"fmt"
+  	"net/http"
+
+  	"github.com/stackimpact/stackimpact-go"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+  	fmt.Fprintf(w, "Hello world!")
+}
+
+func main() {
+  	agent := stackimpact.NewAgent()
+  	agent.Configure("agent key here", "Basic Go Server")
+
+  	http.HandleFunc("/", handler)
+    http.ListenAndServe(":8080", nil)
+}
+```
 
 
 #### Analyzing performance data in the Dashboard
