@@ -36,8 +36,8 @@ func TestCreateCallGraph(t *testing.T) {
 	}
 	//fmt.Printf("CPU USAGE: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if callGraph.measurement < 50 {
-		t.Error("CPU usage is too low")
+	if callGraph.measurement < 2 {
+		t.Errorf("CPU usage is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateCallGraph") {

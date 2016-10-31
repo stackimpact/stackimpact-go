@@ -272,18 +272,18 @@ func TestCreateBlockCallGraphWithTrace(t *testing.T) {
 
 	events := agent.blockReporter.readTraceEvents(1000)
 	/*
-	for _, ev := range events {
-		fmt.Printf("\n\n\n\nEVENTS:\n")
-		lev := ev
-		for lev != nil {
-			fmt.Printf("\n\nLINKED EVENT %v:\n", pprofTrace.EventDescriptions[lev.Type])
-			for _, f := range lev.Stk {
-	      fmt.Printf("%v (%v:%v)\n", f.Fn, f.File, f.Line)
-	    }
+			for _, ev := range events {
+				fmt.Printf("\n\n\n\nEVENTS:\n")
+				lev := ev
+				for lev != nil {
+					fmt.Printf("\n\nLINKED EVENT %v:\n", pprofTrace.EventDescriptions[lev.Type])
+					for _, f := range lev.Stk {
+			      fmt.Printf("%v (%v:%v)\n", f.Fn, f.File, f.Line)
+			    }
 
-			lev = lev.Link
-		}
-  }
+					lev = lev.Link
+				}
+		  }
 	*/
 
 	entryFilterFunc := func(funcName string) bool {
