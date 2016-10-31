@@ -118,31 +118,26 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// traces
-	entryFilterFunc := func(funcName string) bool {
-		return strings.Contains(funcName, "net/http.(*Server).Serve")
-	}
 	traceList := newBreakdownNode("root")
-	eventIndex := br.nextEntry(events, entryFilterFunc, 0)
-	i := 0
-	for eventIndex >= 0 && i < 250 {
-		i++
 
-		entry := events[eventIndex]
+	eventIndex := -1
+	for {
+		selectedEvents, eventIndex = selectEventsByHTTPTrace(events, eventIndex+1)
+		if eventIndex == -1 {
+			break
+		}
 
-		selectedEvents = selectEventsByTrace(entry)
 		if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, 1000); err != nil {
 			br.agent.error(err)
 			break
 		} else {
-			callGraph.name = fmt.Sprintf("[Sample %v]", selectedEvents[0].Ts)
+			callGraph.name = fmt.Sprintf("[Segment %v]", selectedEvents[0].Ts)
 
 			// filter calls with lower than 1ms waiting time
 			callGraph.filter(1, math.Inf(0))
 
 			br.appendToTraceList(traceList, callGraph, 10)
 		}
-
-		eventIndex = br.nextEntry(events, entryFilterFunc, eventIndex+1)
 	}
 
 	if len(traceList.children) > 0 {
@@ -166,49 +161,45 @@ func (br *BlockReporter) appendToTraceList(traceList *BreakdownNode, callGraph *
 	}
 }
 
-func (br *BlockReporter) nextEntry(events []*pprofTrace.Event, entryFilterFunc filterFuncType, startIndex int) int {
-	events = events[startIndex:]
-	for i, ev := range events {
-		if ev.Link == nil || ev.StkID == 0 || len(ev.Stk) == 0 {
-			continue
-		}
-		if ev.Type == pprofTrace.EvGoCreate {
-			if ev.Stk[0] != nil && entryFilterFunc(ev.Stk[0].Fn) {
-				return startIndex + i
-			}
-		}
-	}
-
-	return -1
-}
-
-func selectEventsByTrace(event *pprofTrace.Event) []*pprofTrace.Event {
+func selectEventsByHTTPTrace(events []*pprofTrace.Event, startIndex int) ([]*pprofTrace.Event, int) {
 	selected := make([]*pprofTrace.Event, 0)
 
-	ev := event
-	i := 0
-	for i < 250 && ev != nil {
-		i++
+	events = events[startIndex:]
+	for i, ev := range events {
+		j := 0
+		lev := ev
+		for j < 250 && lev != nil {
+			j++
 
-		switch ev.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-			if ev.StkID != 0 && len(ev.Stk) > 0 {
-				selected = append(selected, ev)
+			if ev.StkID != 0 && len(lev.Stk) >= 2 {
+				if lev.Stk[len(lev.Stk)-1].Fn == "net/http.(*conn).serve" &&
+					lev.Stk[len(lev.Stk)-2].Fn == "net/http.serverHandler.ServeHTTP" {
+					switch ev.Type {
+					case
+						pprofTrace.EvGoBlockNet,
+						pprofTrace.EvGoSysCall,
+						pprofTrace.EvGoBlockSend,
+						pprofTrace.EvGoBlockRecv,
+						pprofTrace.EvGoBlockSelect,
+						pprofTrace.EvGoBlockSync,
+						pprofTrace.EvGoBlockCond,
+						pprofTrace.EvGoSleep:
+						if ev.StkID != 0 && len(ev.Stk) > 0 {
+							selected = append(selected, ev)
+						}
+					}
+				}
+			}
+
+			if len(selected) > 0 {
+				return selected, startIndex + i
 			}
 		}
 
-		ev = ev.Link
+		lev = lev.Link
 	}
 
-	return selected
+	return selected, -1
 }
 
 func selectEventsByType(events []*pprofTrace.Event, eventType byte) []*pprofTrace.Event {

@@ -271,40 +271,32 @@ func TestCreateBlockCallGraphWithTrace(t *testing.T) {
 	}()
 
 	events := agent.blockReporter.readTraceEvents(1000)
-	/*
-			for _, ev := range events {
-				fmt.Printf("\n\n\n\nEVENTS:\n")
-				lev := ev
-				for lev != nil {
-					fmt.Printf("\n\nLINKED EVENT %v:\n", pprofTrace.EventDescriptions[lev.Type])
-					for _, f := range lev.Stk {
-			      fmt.Printf("%v (%v:%v)\n", f.Fn, f.File, f.Line)
-			    }
 
-					lev = lev.Link
-				}
-		  }
-	*/
+	/*for _, ev := range events {
+		fmt.Printf("\n\n\n\nEVENTS:\n")
+		lev := ev
+		for lev != nil {
+			fmt.Printf("\n\nLINKED EVENT %v (%v):\n", pprofTrace.EventDescriptions[lev.Type], lev.G)
+			for _, f := range lev.Stk {
+				fmt.Printf("%v (%v:%v)\n", f.Fn, f.File, f.Line)
+			}
 
-	entryFilterFunc := func(funcName string) bool {
-		return strings.Contains(funcName, "net/http.(*Server).Serve")
-	}
+			lev = lev.Link
+		}
+	}*/
 
-	eventIndex := agent.blockReporter.nextEntry(events, entryFilterFunc, 0)
+	selectedEvents, eventIndex := selectEventsByHTTPTrace(events, 0)
 	if eventIndex < 0 {
 		t.Error("Entry not found for request 1")
 		return
 	}
 
-	eventIndex = agent.blockReporter.nextEntry(events, entryFilterFunc, eventIndex+1)
+	selectedEvents, eventIndex = selectEventsByHTTPTrace(events, eventIndex+1)
 	if eventIndex < 0 {
 		t.Error("Entry not found for request 2")
 		return
 	}
 
-	entry := events[eventIndex]
-
-	selectedEvents := selectEventsByTrace(entry)
 	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
 	if err != nil {
 		t.Error(err)
