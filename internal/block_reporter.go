@@ -14,6 +14,7 @@ import (
 )
 
 type filterFuncType func(funcName string) bool
+type stackMatcherType func(stk []*pprofTrace.Frame) bool
 
 type Record struct {
 	stk  []*pprofTrace.Frame
@@ -117,12 +118,49 @@ func (br *BlockReporter) report(trigger string) {
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
-	// traces
-	traceList := newBreakdownNode("root")
+	// HTTP handler traces
+	var httpHandlerMatcher = func(stk []*pprofTrace.Frame) bool {
+		return (stk[len(stk)-1].Fn == "net/http.(*conn).serve" &&
+			stk[len(stk)-2].Fn == "net/http.serverHandler.ServeHTTP")
+	}
+	segments := br.findTopSegments(events, httpHandlerMatcher)
 
+	if len(segments.children) > 0 {
+		segments.measurement = segments.maxChild().measurement
+
+		metric := newMetric(br.agent, TypeTrace, CategoryHTTPHandlerTrace, NameHTTPTransactions, UnitMillisecond)
+		metric.createMeasurement(trigger, segments.measurement, segments)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+
+	// HTTP client traces
+	var httpClientMatcher = func(stk []*pprofTrace.Frame) bool {
+		for _, f := range stk {
+			if f.Fn == "net/http.(*Client).send" {
+				return true
+			}
+		}
+
+		return false
+	}
+	segments = br.findTopSegments(events, httpClientMatcher)
+
+	if len(segments.children) > 0 {
+		segments.measurement = segments.maxChild().measurement
+
+		metric := newMetric(br.agent, TypeTrace, CategoryHTTPClientTrace, NameHTTPCalls, UnitMillisecond)
+		metric.createMeasurement(trigger, segments.measurement, segments)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+}
+
+func (br *BlockReporter) findTopSegments(events []*pprofTrace.Event, stackMatcher stackMatcherType) *BreakdownNode {
+	segments := newBreakdownNode("root")
+
+	var selectedEvents []*pprofTrace.Event
 	eventIndex := -1
-	for {
-		selectedEvents, eventIndex = selectEventsByHTTPTrace(events, eventIndex+1)
+	for i := 0; i < 2500; i++ {
+		selectedEvents, eventIndex = selectEventsByStack(events, eventIndex+1, stackMatcher)
 		if eventIndex == -1 {
 			break
 		}
@@ -136,44 +174,25 @@ func (br *BlockReporter) report(trigger string) {
 			// filter calls with lower than 1ms waiting time
 			callGraph.filter(1, math.Inf(0))
 
-			br.appendToTraceList(traceList, callGraph, 10)
+			br.appendSegment(segments, callGraph, 10)
 		}
 	}
 
-	if len(traceList.children) > 0 {
-		traceList.measurement = traceList.maxChild().measurement
-
-		metric := newMetric(br.agent, TypeTrace, CategoryHTTPTrace, NameHTTPTransactions, UnitMillisecond)
-		metric.createMeasurement(trigger, traceList.measurement, traceList)
-		br.agent.messageQueue.addMessage("metric", metric.toMap())
-	}
+	return segments
 }
 
-func (br *BlockReporter) appendToTraceList(traceList *BreakdownNode, callGraph *BreakdownNode, max int) {
-	if len(traceList.children) < max {
-		traceList.addChild(callGraph)
-	} else {
-		minChild := traceList.minChild()
-		if minChild.measurement < callGraph.measurement {
-			traceList.removeChild(minChild)
-			traceList.addChild(callGraph)
-		}
-	}
-}
-
-func selectEventsByHTTPTrace(events []*pprofTrace.Event, startIndex int) ([]*pprofTrace.Event, int) {
+func selectEventsByStack(events []*pprofTrace.Event, startIndex int, stackMatcher stackMatcherType) ([]*pprofTrace.Event, int) {
 	selected := make([]*pprofTrace.Event, 0)
 
 	events = events[startIndex:]
 	for i, ev := range events {
 		j := 0
 		lev := ev
-		for j < 250 && lev != nil {
+		for j < 25 && lev != nil {
 			j++
 
 			if ev.StkID != 0 && len(lev.Stk) >= 2 {
-				if lev.Stk[len(lev.Stk)-1].Fn == "net/http.(*conn).serve" &&
-					lev.Stk[len(lev.Stk)-2].Fn == "net/http.serverHandler.ServeHTTP" {
+				if stackMatcher(lev.Stk) {
 					switch ev.Type {
 					case
 						pprofTrace.EvGoBlockNet,
@@ -200,6 +219,18 @@ func selectEventsByHTTPTrace(events []*pprofTrace.Event, startIndex int) ([]*ppr
 	}
 
 	return selected, -1
+}
+
+func (br *BlockReporter) appendSegment(segments *BreakdownNode, callGraph *BreakdownNode, max int) {
+	if len(segments.children) < max {
+		segments.addChild(callGraph)
+	} else {
+		minChild := segments.minChild()
+		if minChild.measurement < callGraph.measurement {
+			segments.removeChild(minChild)
+			segments.addChild(callGraph)
+		}
+	}
 }
 
 func selectEventsByType(events []*pprofTrace.Event, eventType byte) []*pprofTrace.Event {
