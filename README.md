@@ -1,6 +1,6 @@
 # StackImpact Go Agent
 
-## Description
+## Overview
 
 StackImpact is a performance profiling and monitoring service for production Go applications. It gives you continuous visibility with line-of-code precision into application performance, such as CPU, memory and IO hot spots as well execution bottlenecks, allowing to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
 
@@ -8,7 +8,7 @@ Main features:
 
 * Automatic hot spot profiling for CPU, memory allocations, network, system calls and lock contention.
 * Automatic bottleneck tracing for HTTP handlers and HTTP clients.
-* Health monitoring including CPU, Memory, garbage collection and other runtime metrics.
+* Health monitoring including CPU, memory, garbage collection and other runtime metrics.
 * Alerts on hot spot anomalies.
 * Multiple account users for team collaboration.
 
@@ -79,6 +79,21 @@ func main() {
   	http.HandleFunc("/", handler)
     http.ListenAndServe(":8080", nil)
 }
+```
+
+
+#### Measuring code segments (OPTIONAL)
+
+To measure performance and detect bottlenecks in arbitrary parts of application, the segment API can be used.
+
+```go
+segment := agent.MeasureSegment("Segment1")
+defer segment.Stop()
+```
+
+```go
+subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
+defer subsegment.Stop()
 ```
 
 

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.1.1"
+const AgentVersion = "1.1.2"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentConfigured bool = false
@@ -28,6 +28,7 @@ type Agent struct {
 	cpuReporter        *CPUReporter
 	allocationReporter *AllocationReporter
 	blockReporter      *BlockReporter
+	segmentReporter    *SegmentReporter
 
 	// Options
 	DashboardAddress string
@@ -51,6 +52,7 @@ func NewAgent() *Agent {
 		cpuReporter:        nil,
 		allocationReporter: nil,
 		blockReporter:      nil,
+		segmentReporter:    nil,
 		DashboardAddress:   SAASDashboardAddress,
 		AgentKey:           "",
 		AppName:            "",
@@ -68,6 +70,7 @@ func NewAgent() *Agent {
 	a.cpuReporter = newCPUReporter(a)
 	a.allocationReporter = newAllocationReporter(a)
 	a.blockReporter = newBlockReporter(a)
+	a.segmentReporter = newSegmentReporter(a)
 
 	return a
 }
@@ -96,10 +99,15 @@ func (a *Agent) Configure(agentKey string, appName string) {
 	a.cpuReporter.start()
 	a.allocationReporter.start()
 	a.blockReporter.start()
+	a.segmentReporter.start()
 
 	a.log("Agent started.")
 
 	return
+}
+
+func (a *Agent) RecordSegment(path []string, duration int64) {
+	go a.segmentReporter.recordSegment(path, duration)
 }
 
 func (a *Agent) log(format string, values ...interface{}) {

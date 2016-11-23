@@ -35,3 +35,17 @@ func (a *Agent) Configure(agentKey string, appName string) {
 
 	a.internalAgent.Configure(agentKey, appName)
 }
+
+func (a *Agent) MeasureSegment(segmentName string) *Segment {
+	s := newSegment(a, []string{segmentName})
+	s.start()
+
+	return s
+}
+
+func (a *Agent) MeasureSubsegment(segmentName string, subsegmentName string) *Segment {
+	s := newSegment(a, []string{segmentName, subsegmentName})
+	s.start()
+
+	return s
+}

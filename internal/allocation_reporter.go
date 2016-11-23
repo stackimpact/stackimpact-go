@@ -156,15 +156,12 @@ func addStackToCallGraph(rootNode *BreakdownNode, stk []uintptr, measurement flo
 	// add frames to root
 	rootNode.measurement += measurement
 
-	parentNode := rootNode
-
+	currentNode := rootNode
 	for i := len(frames) - 1; i >= 0; i-- {
 		f := frames[i]
 
-		child := parentNode.findOrAddChild(f.name)
-		child.measurement += measurement
-
-		parentNode = child
+		currentNode = currentNode.findOrAddChild(f.name)
+		currentNode.measurement += measurement
 	}
 
 	return nil

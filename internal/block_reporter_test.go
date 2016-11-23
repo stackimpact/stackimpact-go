@@ -44,12 +44,17 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	    fmt.Printf("\n")
 	  }*/
 
-	selectedEvents := selectEventsByType(events, pprofTrace.EvGoBlockRecv)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockRecv)
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
 	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	callGraph.evaluateSum()
+	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	if callGraph.measurement < 100 {
@@ -104,12 +109,17 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 	    fmt.Printf("\n")
 	  }*/
 
-	selectedEvents := selectEventsByType(events, pprofTrace.EvGoBlockNet)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockNet)
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
 	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	callGraph.evaluateSum()
+	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	if callGraph.measurement < 100 {
@@ -154,12 +164,17 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 	    fmt.Printf("\n")
 	  }*/
 
-	selectedEvents := selectEventsByType(events, pprofTrace.EvGoBlockSync)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockSync)
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
 	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	callGraph.evaluateSum()
+	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	if callGraph.measurement < 100 {
@@ -199,12 +214,17 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 	    fmt.Printf("\n")
 	  }*/
 
-	selectedEvents := selectEventsByType(events, pprofTrace.EvGoSysCall)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoSysCall)
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
 	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 2000)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	callGraph.evaluateSum()
+	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	if callGraph.measurement < 100 {
@@ -285,23 +305,43 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 		}
 	}*/
 
-	var httpHandlerMatcher = func(stk []*pprofTrace.Frame) bool {
-		return (stk[len(stk)-1].Fn == "net/http.(*conn).serve" &&
-			stk[len(stk)-2].Fn == "net/http.serverHandler.ServeHTTP")
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		l := len(event.Stk)
+		return (l >= 2 &&
+			event.Stk[l-1].Fn == "net/http.(*conn).serve" &&
+			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
 	}
-	segments := agent.blockReporter.findTopSegments(events, httpHandlerMatcher)
+	selectedEvents := selectEvents(events, selectorFunc)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	callGraph.evaluateStdev()
+	callGraph.propagate()
 
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if len(segments.children) == 0 {
-		t.Error("No segments found")
-	}
 
-	if segments.maxChild().measurement < 100 {
+	if callGraph.measurement < 100 {
 		t.Error("Wait time is too low")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", segments.maxChild().toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1.1") {
+	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1.1") {
 		t.Error("The test function is not found in the profile")
 	}
 
@@ -344,8 +384,22 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 
 	events := agent.blockReporter.readTraceEvents(1000)
 
-	var httpClientMatcher = func(stk []*pprofTrace.Frame) bool {
-		for _, f := range stk {
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		for _, f := range event.Stk {
 			if f.Fn == "net/http.(*Client).send" {
 				return true
 			}
@@ -353,56 +407,25 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 
 		return false
 	}
-	segments := agent.blockReporter.findTopSegments(events, httpClientMatcher)
+	selectedEvents := selectEvents(events, selectorFunc)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	callGraph.evaluateStdev()
+	callGraph.propagate()
 
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if len(segments.children) == 0 {
-		t.Error("No segments found")
-	}
 
-	if segments.maxChild().measurement < 100 {
+	if callGraph.measurement < 100 {
 		t.Error("Wait time is too low")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", segments.maxChild().toMap()), "TestCreateBlockCallGraphWithHTTPClient.func2") {
+	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPClient.func2") {
 		t.Error("The test function is not found in the profile")
 	}
 
 	<-done
-}
-
-func TestAppendSegment(t *testing.T) {
-	agent := NewAgent()
-	agent.Debug = true
-
-	segments := newBreakdownNode("root")
-
-	callGraph := newBreakdownNode("1")
-	callGraph.measurement = 1
-	agent.blockReporter.appendSegment(segments, callGraph, 2)
-
-	callGraph = newBreakdownNode("2")
-	callGraph.measurement = 2
-	agent.blockReporter.appendSegment(segments, callGraph, 2)
-
-	callGraph = newBreakdownNode("3")
-	callGraph.measurement = 3
-	agent.blockReporter.appendSegment(segments, callGraph, 2)
-
-	if len(segments.children) != 2 {
-		t.Error("wrong number of children")
-	}
-
-	if segments.findChild("1") != nil {
-		t.Error("child 1 should not be in the list")
-	}
-
-	if segments.findChild("2") == nil {
-		t.Error("child 2 should be in the list")
-	}
-
-	if segments.findChild("3") == nil {
-		t.Error("child 2 should be in the list")
-	}
 }

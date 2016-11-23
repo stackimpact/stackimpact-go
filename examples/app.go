@@ -179,6 +179,46 @@ func simulateLockWait() {
 }
 
 
+
+func simulateSegments(agent *stackimpact.Agent) {
+	for {
+			done1 := make(chan bool)
+
+			go func() {
+				segment := agent.MeasureSegment("Segment1")
+				defer segment.Stop()
+
+				done2 := make(chan bool)
+
+				go func() {
+					subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
+					defer subsegment.Stop()
+
+					time.Sleep(time.Duration(50 + rand.Intn(20)) * time.Millisecond)
+
+					done2 <- true
+				}()
+
+				<-done2
+
+				go func() {
+					subsegment := agent.MeasureSubsegment("Segment1", "Subsegment2")
+					defer subsegment.Stop()
+
+					time.Sleep(time.Duration(20 + rand.Intn(10)) * time.Millisecond)
+
+					done2 <- true
+				}()
+
+				<-done2
+
+				done1 <- true
+			}()
+
+			<-done1
+	}
+}
+
 func main() {
 	// StackImpact initialization
 	agent := stackimpact.NewAgent()
@@ -196,6 +236,7 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
+	go simulateSegments(agent)
 
 	select {}
 }

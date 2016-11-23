@@ -63,3 +63,51 @@ func TestBreakdownFilter(t *testing.T) {
 		t.Errorf("child2child1 should be filtered")
 	}
 }
+
+func TestBreakdownDepth(t *testing.T) {
+	root := newBreakdownNode("root")
+
+	child1 := newBreakdownNode("child1")
+	root.addChild(child1)
+
+	child2 := newBreakdownNode("child2")
+	root.addChild(child2)
+
+	child2child1 := newBreakdownNode("child2child1")
+	child2.addChild(child2child1)
+
+	if root.depth() != 3 {
+		t.Errorf("root depth should be 3, but is %v", root.depth())
+	}
+
+	if child1.depth() != 1 {
+		t.Errorf("child1 depth should be 1, but is %v", child1.depth())
+	}
+
+	if child2.depth() != 2 {
+		t.Errorf("child2 depth should be 2, but is %v", child2.depth())
+	}
+}
+
+func TestBreakdownStdev(t *testing.T) {
+	root := newBreakdownNode("root")
+
+	child1 := newBreakdownNode("child1")
+	root.addChild(child1)
+
+	child2 := newBreakdownNode("child2")
+	root.addChild(child2)
+
+	child2child1 := newBreakdownNode("child2child1")
+	child2.addChild(child2child1)
+	child2child1.count = 3
+	child2child1.sum = 4 + 5 + 6
+	child2child1.sum2 = 16 + 25 + 36
+
+	root.evaluateStdev()
+	root.propagate()
+
+	if int(root.measurement) != 6 {
+		t.Errorf("root measurement should be 6, but is %v", root.measurement)
+	}
+}

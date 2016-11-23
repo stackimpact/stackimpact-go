@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -14,6 +15,7 @@ const CategoryCPU string = "cpu"
 const CategoryMemory string = "memory"
 const CategoryGC string = "gc"
 const CategoryRuntime string = "runtime"
+const CategorySegments string = "segments"
 const CategoryCPUProfile string = "cpu-profile"
 const CategoryMemoryProfile string = "memory-profile"
 const CategoryChannelProfile string = "channel-profile"
@@ -22,6 +24,7 @@ const CategorySystemProfile string = "system-profile"
 const CategoryLockProfile string = "lock-profile"
 const CategoryHTTPHandlerTrace string = "http-trace"
 const CategoryHTTPClientTrace string = "http-client-trace"
+const CategorySegmentTrace string = "segment-trace"
 
 const NameCPUTime string = "CPU time"
 const NameCPUUsage string = "CPU usage"
@@ -57,6 +60,9 @@ const TriggerAnomaly string = "anomaly"
 type BreakdownNode struct {
 	name        string
 	measurement float64
+	sum         float64
+	sum2        float64
+	count       int64
 	children    map[string]*BreakdownNode
 }
 
@@ -64,6 +70,9 @@ func newBreakdownNode(name string) *BreakdownNode {
 	bn := &BreakdownNode{
 		name:        name,
 		measurement: 0,
+		sum:         0,
+		sum2:        0,
+		count:       0,
 		children:    make(map[string]*BreakdownNode),
 	}
 
@@ -123,6 +132,47 @@ func (bn *BreakdownNode) filter(min float64, max float64) {
 		} else {
 			child.filter(min, max)
 		}
+	}
+}
+
+func (bn *BreakdownNode) depth() int {
+	max := 0
+	for _, child := range bn.children {
+		cd := child.depth()
+		if cd > max {
+			max = cd
+		}
+	}
+
+	return max + 1
+}
+
+func (bn *BreakdownNode) propagate() {
+	for _, child := range bn.children {
+		child.propagate()
+		bn.measurement += child.measurement
+	}
+}
+
+func (bn *BreakdownNode) evaluateSum() {
+	bn.measurement += bn.sum
+
+	for _, child := range bn.children {
+		child.evaluateSum()
+	}
+}
+
+func (bn *BreakdownNode) evaluateStdev() {
+	if bn.count > 1 {
+		mean := bn.sum / float64(bn.count)
+		stdev := math.Sqrt(bn.sum2/float64(bn.count) - (mean * mean))
+		bn.measurement += mean + 2*stdev
+	} else if bn.count == 1 {
+		bn.measurement += bn.sum
+	}
+
+	for _, child := range bn.children {
+		child.evaluateStdev()
 	}
 }
 

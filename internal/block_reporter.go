@@ -14,7 +14,7 @@ import (
 )
 
 type filterFuncType func(funcName string) bool
-type stackMatcherType func(stk []*pprofTrace.Frame) bool
+type selectorFuncType func(event *pprofTrace.Event) bool
 
 type Record struct {
 	stk  []*pprofTrace.Frame
@@ -57,6 +57,7 @@ func (br *BlockReporter) report(trigger string) {
 
 	var selectedEvents []*pprofTrace.Event
 	var filterFunc filterFuncType
+	var selectorFunc selectorFuncType
 	duration := int64(5000)
 
 	br.agent.log("Starting trace profiler for %v milliseconds...", duration)
@@ -64,11 +65,15 @@ func (br *BlockReporter) report(trigger string) {
 	br.agent.log("Trace profiler stopped.")
 
 	// channels
-	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockRecv)
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockRecv)
+	}
+	selectedEvents = selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		// filter calls with lower than 1ms waiting time
+		callGraph.evaluateSum()
+		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryChannelProfile, NameChannelWaitTime, UnitMillisecond)
@@ -77,14 +82,18 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// network
-	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockNet)
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockNet)
+	}
+	selectedEvents = selectEvents(events, selectorFunc)
 	filterFunc = func(funcName string) bool {
 		return !strings.Contains(funcName, "AcceptTCP")
 	}
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, filterFunc, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		// filter calls with lower than 1ms waiting time
+		callGraph.evaluateSum()
+		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryNetworkProfile, NameNetworkWaitTime, UnitMillisecond)
@@ -93,11 +102,15 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// system
-	selectedEvents = selectEventsByType(events, pprofTrace.EvGoSysCall)
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoSysCall)
+	}
+	selectedEvents = selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		// filter calls with lower than 1ms waiting time
+		callGraph.evaluateSum()
+		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategorySystemProfile, NameSystemWaitTime, UnitMillisecond)
@@ -106,11 +119,15 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// locks
-	selectedEvents = selectEventsByType(events, pprofTrace.EvGoBlockSync)
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		return (event.Type == pprofTrace.EvGoBlockSync)
+	}
+	selectedEvents = selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		// filter calls with lower than 1ms waiting time
+		callGraph.evaluateSum()
+		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryLockProfile, NameLockWaitTime, UnitMillisecond)
@@ -119,23 +136,57 @@ func (br *BlockReporter) report(trigger string) {
 	}
 
 	// HTTP handler traces
-	var httpHandlerMatcher = func(stk []*pprofTrace.Frame) bool {
-		return (stk[len(stk)-1].Fn == "net/http.(*conn).serve" &&
-			stk[len(stk)-2].Fn == "net/http.serverHandler.ServeHTTP")
-	}
-	segments := br.findTopSegments(events, httpHandlerMatcher)
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		l := len(event.Stk)
 
-	if len(segments.children) > 0 {
-		segments.measurement = segments.maxChild().measurement
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		return (l >= 2 &&
+			event.Stk[l-1].Fn == "net/http.(*conn).serve" &&
+			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
+	}
+	selectedEvents = selectEvents(events, selectorFunc)
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
+		br.agent.error(err)
+	} else {
+		callGraph.evaluateStdev()
+		callGraph.propagate()
+		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeTrace, CategoryHTTPHandlerTrace, NameHTTPTransactions, UnitMillisecond)
-		metric.createMeasurement(trigger, segments.measurement, segments)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
 	// HTTP client traces
-	var httpClientMatcher = func(stk []*pprofTrace.Frame) bool {
-		for _, f := range stk {
+	selectorFunc = func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		for _, f := range event.Stk {
 			if f.Fn == "net/http.(*Client).send" {
 				return true
 			}
@@ -143,103 +194,31 @@ func (br *BlockReporter) report(trigger string) {
 
 		return false
 	}
-	segments = br.findTopSegments(events, httpClientMatcher)
-
-	if len(segments.children) > 0 {
-		segments.measurement = segments.maxChild().measurement
+	selectedEvents = selectEvents(events, selectorFunc)
+	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
+		br.agent.error(err)
+	} else {
+		callGraph.evaluateStdev()
+		callGraph.propagate()
+		callGraph.filter(1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeTrace, CategoryHTTPClientTrace, NameHTTPCalls, UnitMillisecond)
-		metric.createMeasurement(trigger, segments.measurement, segments)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }
 
-func (br *BlockReporter) findTopSegments(events []*pprofTrace.Event, stackMatcher stackMatcherType) *BreakdownNode {
-	segments := newBreakdownNode("root")
-
-	var selectedEvents []*pprofTrace.Event
-	eventIndex := -1
-	for i := 0; i < 2500; i++ {
-		selectedEvents, eventIndex = selectEventsByStack(events, eventIndex+1, stackMatcher)
-		if eventIndex == -1 {
-			break
-		}
-
-		if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, 1000); err != nil {
-			br.agent.error(err)
-			break
-		} else {
-			callGraph.name = fmt.Sprintf("[Segment %v]", selectedEvents[0].Ts)
-
-			// filter calls with lower than 1ms waiting time
-			callGraph.filter(1, math.Inf(0))
-
-			br.appendSegment(segments, callGraph, 10)
-		}
-	}
-
-	return segments
-}
-
-func selectEventsByStack(events []*pprofTrace.Event, startIndex int, stackMatcher stackMatcherType) ([]*pprofTrace.Event, int) {
+func selectEvents(events []*pprofTrace.Event, selectorFunc selectorFuncType) []*pprofTrace.Event {
 	selected := make([]*pprofTrace.Event, 0)
 
-	events = events[startIndex:]
-	for i, ev := range events {
-		j := 0
-		lev := ev
-		for j < 25 && lev != nil {
-			j++
-
-			if ev.StkID != 0 && len(lev.Stk) >= 2 {
-				if stackMatcher(lev.Stk) {
-					switch ev.Type {
-					case
-						pprofTrace.EvGoBlockNet,
-						pprofTrace.EvGoSysCall,
-						pprofTrace.EvGoBlockSend,
-						pprofTrace.EvGoBlockRecv,
-						pprofTrace.EvGoBlockSelect,
-						pprofTrace.EvGoBlockSync,
-						pprofTrace.EvGoBlockCond,
-						pprofTrace.EvGoSleep:
-						if ev.StkID != 0 && len(ev.Stk) > 0 {
-							selected = append(selected, ev)
-						}
-					}
-				}
-			}
-
-			if len(selected) > 0 {
-				return selected, startIndex + i
-			}
-		}
-
-		lev = lev.Link
-	}
-
-	return selected, -1
-}
-
-func (br *BlockReporter) appendSegment(segments *BreakdownNode, callGraph *BreakdownNode, max int) {
-	if len(segments.children) < max {
-		segments.addChild(callGraph)
-	} else {
-		minChild := segments.minChild()
-		if minChild.measurement < callGraph.measurement {
-			segments.removeChild(minChild)
-			segments.addChild(callGraph)
-		}
-	}
-}
-
-func selectEventsByType(events []*pprofTrace.Event, eventType byte) []*pprofTrace.Event {
-	selected := make([]*pprofTrace.Event, 0)
 	for _, ev := range events {
-		if ev.Type == eventType {
-			selected = append(selected, ev)
+		if ev.StkID != 0 && len(ev.Stk) > 0 {
+			if selectorFunc == nil || selectorFunc(ev) {
+				selected = append(selected, ev)
+			}
 		}
 	}
+
 	return selected
 }
 
@@ -281,10 +260,7 @@ func (br *BlockReporter) createBlockCallGraph(
 			}
 		}
 
-		rootNode.measurement += float64(rec.time / 1e6 / seconds)
-
-		parentNode := rootNode
-
+		currentNode := rootNode
 		for i := len(rec.stk) - 1; i >= 0; i-- {
 			f := rec.stk[i]
 
@@ -293,11 +269,13 @@ func (br *BlockReporter) createBlockCallGraph(
 			}
 
 			frameName := fmt.Sprintf("%v (%v:%v)", f.Fn, f.File, f.Line)
-			child := parentNode.findOrAddChild(frameName)
-			child.measurement += float64(rec.time / 1e6 / seconds)
-
-			parentNode = child
+			currentNode = currentNode.findOrAddChild(frameName)
 		}
+
+		t := float64(rec.time / 1e6 / seconds)
+		currentNode.sum += t
+		currentNode.sum2 += t * t
+		currentNode.count += 1
 	}
 
 	return rootNode, nil

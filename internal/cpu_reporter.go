@@ -101,7 +101,7 @@ func (cr *CPUReporter) createCPUCallGraph(p *profile.Profile) (*BreakdownNode, e
 		stackPercent := float64(stackSamples) / float64(maxSamples) * 100
 		rootNode.measurement += stackPercent
 
-		parentNode := rootNode
+		currentNode := rootNode
 		for i := len(s.Location) - 1; i >= 0; i-- {
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
@@ -111,10 +111,8 @@ func (cr *CPUReporter) createCPUCallGraph(p *profile.Profile) (*BreakdownNode, e
 			}
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
-			child := parentNode.findOrAddChild(frameName)
-			child.measurement += stackPercent
-
-			parentNode = child
+			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.measurement += stackPercent
 		}
 	}
 
