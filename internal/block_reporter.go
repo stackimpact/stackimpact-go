@@ -72,7 +72,6 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateSum()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -92,7 +91,6 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, filterFunc, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateSum()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -109,7 +107,6 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateSum()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -126,7 +123,6 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateSum()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -161,7 +157,7 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateStdev()
+		callGraph.evaluateP95()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -198,7 +194,7 @@ func (br *BlockReporter) report(trigger string) {
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
-		callGraph.evaluateStdev()
+		callGraph.evaluateP95()
 		callGraph.propagate()
 		callGraph.filter(1, math.Inf(0))
 
@@ -273,9 +269,8 @@ func (br *BlockReporter) createBlockCallGraph(
 		}
 
 		t := float64(rec.time / 1e6 / seconds)
-		currentNode.sum += t
-		currentNode.sum2 += t * t
-		currentNode.count += 1
+		currentNode.measurement += t
+		currentNode.updateP95(t)
 	}
 
 	return rootNode, nil

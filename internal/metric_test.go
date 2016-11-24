@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"math/rand"
 	"testing"
 )
 
@@ -89,7 +90,7 @@ func TestBreakdownDepth(t *testing.T) {
 	}
 }
 
-func TestBreakdownStdev(t *testing.T) {
+func TestBreakdownP95(t *testing.T) {
 	root := newBreakdownNode("root")
 
 	child1 := newBreakdownNode("child1")
@@ -100,14 +101,27 @@ func TestBreakdownStdev(t *testing.T) {
 
 	child2child1 := newBreakdownNode("child2child1")
 	child2.addChild(child2child1)
-	child2child1.count = 3
-	child2child1.sum = 4 + 5 + 6
-	child2child1.sum2 = 16 + 25 + 36
 
-	root.evaluateStdev()
+	child2child1.updateP95(6.5)
+	child2child1.updateP95(4.2)
+	child2child1.updateP95(5.0)
+	child2child1.evaluateP95()
 	root.propagate()
 
-	if int(root.measurement) != 6 {
+	if root.measurement != 6.5 {
 		t.Errorf("root measurement should be 6, but is %v", root.measurement)
+	}
+}
+
+func TestBreakdownP95Big(t *testing.T) {
+	root := newBreakdownNode("root")
+
+	for i := 0; i < 10000; i++ {
+		root.updateP95(200.0 + float64(rand.Intn(50)))
+	}
+	root.evaluateP95()
+
+	if root.measurement < 200 || root.measurement > 250 {
+		t.Errorf("root measurement should be in [200, 250], but is %v", root.measurement)
 	}
 }

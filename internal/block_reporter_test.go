@@ -53,7 +53,6 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateSum()
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
@@ -118,7 +117,6 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateSum()
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
@@ -173,7 +171,6 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateSum()
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
@@ -223,7 +220,6 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateSum()
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
@@ -331,7 +327,7 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateStdev()
+	callGraph.evaluateP95()
 	callGraph.propagate()
 
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
@@ -413,7 +409,7 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	callGraph.evaluateStdev()
+	callGraph.evaluateP95()
 	callGraph.propagate()
 
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)

@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"math"
+	"math/rand"
+	"sort"
 	"time"
 )
 
@@ -57,12 +59,12 @@ const UnitPercent string = "percent"
 const TriggerTimer string = "timer"
 const TriggerAnomaly string = "anomaly"
 
+const ReservoirSize int = 1000
+
 type BreakdownNode struct {
 	name        string
 	measurement float64
-	sum         float64
-	sum2        float64
-	count       int64
+	reservoir   []float64
 	children    map[string]*BreakdownNode
 }
 
@@ -70,9 +72,7 @@ func newBreakdownNode(name string) *BreakdownNode {
 	bn := &BreakdownNode{
 		name:        name,
 		measurement: 0,
-		sum:         0,
-		sum2:        0,
-		count:       0,
+		reservoir:   nil,
 		children:    make(map[string]*BreakdownNode),
 	}
 
@@ -154,25 +154,29 @@ func (bn *BreakdownNode) propagate() {
 	}
 }
 
-func (bn *BreakdownNode) evaluateSum() {
-	bn.measurement += bn.sum
+func (bn *BreakdownNode) updateP95(value float64) {
+	if bn.reservoir == nil {
+		bn.reservoir = make([]float64, 0, ReservoirSize)
+	}
 
-	for _, child := range bn.children {
-		child.evaluateSum()
+	if len(bn.reservoir) < ReservoirSize {
+		bn.reservoir = append(bn.reservoir, value)
+	} else {
+		bn.reservoir[rand.Intn(ReservoirSize)] = value
 	}
 }
 
-func (bn *BreakdownNode) evaluateStdev() {
-	if bn.count > 1 {
-		mean := bn.sum / float64(bn.count)
-		stdev := math.Sqrt(bn.sum2/float64(bn.count) - (mean * mean))
-		bn.measurement += mean + 2*stdev
-	} else if bn.count == 1 {
-		bn.measurement += bn.sum
+func (bn *BreakdownNode) evaluateP95() {
+	if bn.reservoir != nil && len(bn.reservoir) > 0 {
+		sort.Float64s(bn.reservoir)
+		index := int(math.Floor(float64(len(bn.reservoir)) / 100.0 * 95.0))
+		bn.measurement = bn.reservoir[index]
+
+		bn.reservoir = bn.reservoir[:0]
 	}
 
 	for _, child := range bn.children {
-		child.evaluateStdev()
+		child.evaluateP95()
 	}
 }
 

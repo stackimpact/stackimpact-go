@@ -61,10 +61,7 @@ func (sr *SegmentReporter) recordSegment(path []string, duration int64) {
 		}
 	}
 
-	d := float64(duration)
-	currentNode.sum += d
-	currentNode.sum2 += d * d
-	currentNode.count += 1
+	currentNode.updateP95(float64(duration))
 
 	sr.recordLock.Unlock()
 }
@@ -73,7 +70,7 @@ func (sr *SegmentReporter) report(trigger string) {
 	sr.recordLock.Lock()
 
 	for _, segmentGraph := range sr.segmentGraphs {
-		segmentGraph.evaluateStdev()
+		segmentGraph.evaluateP95()
 
 		if len(segmentGraph.children) > 0 {
 			metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentGraph.name, UnitMillisecond)
