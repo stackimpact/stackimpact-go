@@ -24,7 +24,7 @@ func newCPUReporter(agent *Agent) *CPUReporter {
 	}
 
 	baseCpuTime, _ := readCPUTime()
-	cr.reportingStrategy = newReportingStrategy(agent, 170, 300,
+	cr.reportingStrategy = newReportingStrategy(agent, 60, 300,
 		func() float64 {
 			cpuTime, _ := readCPUTime()
 			cpuUsage := float64(int((cpuTime - baseCpuTime) / 1e6))

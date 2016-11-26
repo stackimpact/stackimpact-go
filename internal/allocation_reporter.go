@@ -38,7 +38,7 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 		reportingStrategy: nil,
 	}
 
-	ar.reportingStrategy = newReportingStrategy(agent, 100, 300,
+	ar.reportingStrategy = newReportingStrategy(agent, 45, 300,
 		func() float64 {
 			memAlloc := readMemAlloc()
 			return float64(int64(memAlloc / 1e6))

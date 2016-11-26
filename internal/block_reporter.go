@@ -58,8 +58,8 @@ func (br *BlockReporter) report(trigger string) {
 	var selectedEvents []*pprofTrace.Event
 	var filterFunc filterFuncType
 	var selectorFunc selectorFuncType
-	duration := int64(5000)
 
+	duration := br.adjustTraceDuration()
 	br.agent.log("Starting trace profiler for %v milliseconds...", duration)
 	events := br.readTraceEvents(duration)
 	br.agent.log("Trace profiler stopped.")
@@ -154,7 +154,7 @@ func (br *BlockReporter) report(trigger string) {
 			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
 	}
 	selectedEvents = selectEvents(events, selectorFunc)
-	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
+	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.evaluateP95()
@@ -191,7 +191,7 @@ func (br *BlockReporter) report(trigger string) {
 		return false
 	}
 	selectedEvents = selectEvents(events, selectorFunc)
-	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
+	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.evaluateP95()
@@ -222,7 +222,8 @@ func (br *BlockReporter) createBlockCallGraph(
 	events []*pprofTrace.Event,
 	filterFunc filterFuncType,
 	duration int64) (*BreakdownNode, error) {
-	seconds := int64(duration / 1000)
+
+	seconds := float64(duration) / 1000.0
 
 	prof := make(map[uint64]Record)
 	for _, ev := range events {
@@ -268,12 +269,73 @@ func (br *BlockReporter) createBlockCallGraph(
 			currentNode = currentNode.findOrAddChild(frameName)
 		}
 
-		t := float64(rec.time / 1e6 / seconds)
+		t := float64(rec.time) / float64(1e6) / seconds
 		currentNode.measurement += t
+	}
+
+	return rootNode, nil
+}
+
+func (br *BlockReporter) createTraceCallGraph(
+	events []*pprofTrace.Event) (*BreakdownNode, error) {
+
+	// build call graph
+	rootNode := newBreakdownNode("root")
+
+	for _, ev := range events {
+		if ev.Link == nil || ev.StkID == 0 || len(ev.Stk) == 0 {
+			continue
+		}
+
+		currentNode := rootNode
+		for i := len(ev.Stk) - 1; i >= 0; i-- {
+			f := ev.Stk[i]
+
+			if f.Fn == "runtime.goexit" {
+				continue
+			}
+
+			frameName := fmt.Sprintf("%v (%v:%v)", f.Fn, f.File, f.Line)
+			currentNode = currentNode.findOrAddChild(frameName)
+		}
+
+		t := float64(ev.Link.Ts-ev.Ts) / float64(1e6)
 		currentNode.updateP95(t)
 	}
 
 	return rootNode, nil
+}
+
+func (br *BlockReporter) adjustTraceDuration() int64 {
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+
+	trace.Start(w)
+
+	done := make(chan int64)
+
+	timer := time.NewTimer(10 * time.Millisecond)
+	go func() {
+		ph := br.agent.panicHandler()
+		defer ph()
+
+		<-timer.C
+
+		trace.Stop()
+
+		w.Flush()
+		size := buf.Len()
+
+		// adjust tracing duration based on 10ms sample trace log size
+		duration := int64(5000 - size/5)
+		if duration <= 0 {
+			duration = 100
+		}
+
+		done <- duration
+	}()
+
+	return <-done
 }
 
 func (br *BlockReporter) readTraceEvents(duration int64) []*pprofTrace.Event {

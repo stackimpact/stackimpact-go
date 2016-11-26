@@ -36,11 +36,11 @@ func TestRecordSegment(t *testing.T) {
 
 	<-done1
 
-	if seg1.Duration < 100 {
+	if seg1.Duration < 50 {
 		t.Errorf("Duration of seg1 is too low: %v", seg1.Duration)
 	}
 
-	if sub1.Duration < 70 {
+	if sub1.Duration < 35 {
 		t.Errorf("Duration of sub1 is too low: %v", sub1.Duration)
 	}
 }

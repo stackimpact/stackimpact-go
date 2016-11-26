@@ -12,6 +12,35 @@ import (
 	pprofTrace "github.com/stackimpact/stackimpact-go/internal/pprof/trace"
 )
 
+func TestAdjustTraceDurtaion(t *testing.T) {
+	agent := NewAgent()
+	agent.Debug = true
+
+	duration := agent.blockReporter.adjustTraceDuration()
+
+	if duration < 3000 {
+		t.Errorf("Duration should be >= 3000, but is %v", duration)
+	}
+
+	done := make(chan bool)
+
+	go func() {
+		for i := 0; i < 10000; i++ {
+			go func() {
+				<-done
+			}()
+		}
+	}()
+
+	duration = agent.blockReporter.adjustTraceDuration()
+
+	done <- true
+
+	if duration != 100 {
+		t.Errorf("Duration should be 100, but is %v", duration)
+	}
+}
+
 func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
@@ -24,7 +53,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		wait := make(chan bool)
 
 		go func() {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
 			wait <- true
 		}()
@@ -34,7 +63,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(1000)
+	events := agent.blockReporter.readTraceEvents(200)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -48,7 +77,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockRecv)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
 	if err != nil {
 		t.Error(err)
 		return
@@ -56,7 +85,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
@@ -72,33 +101,34 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 	agent.Debug = true
 
 	go func() {
-		http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(500 * time.Millisecond)
+		http.HandleFunc("/ready1", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "OK")
 		})
 
-		if err := http.ListenAndServe(":5000", nil); err != nil {
+		http.HandleFunc("/test1", func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Fprintf(w, "OK")
+		})
+
+		if err := http.ListenAndServe(":5001", nil); err != nil {
 			t.Error(err)
 			return
 		}
 	}()
 
-	done := make(chan bool)
+	waitForServer("http://localhost:5001/ready1")
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-
-		res, err := http.Get("http://localhost:5000/test")
+		res, err := http.Get("http://localhost:5001/test1")
 		if err != nil {
 			t.Error(err)
 		} else {
 			defer res.Body.Close()
 		}
-
-		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(1000)
+	events := agent.blockReporter.readTraceEvents(150)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -112,7 +142,7 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockNet)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 150)
 	if err != nil {
 		t.Error(err)
 		return
@@ -120,15 +150,13 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithNetwork") {
+	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "net.(*netFD).Read") {
 		t.Error("The test function is not found in the profile")
 	}
-
-	<-done
 }
 
 func TestCreateBlockCallGraphWithLock(t *testing.T) {
@@ -141,18 +169,18 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 	lock.Lock()
 
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		lock.Lock()
 
 		done <- true
 	}()
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		lock.Unlock()
 	}()
 
-	events := agent.blockReporter.readTraceEvents(1000)
+	events := agent.blockReporter.readTraceEvents(200)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -166,7 +194,7 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockSync)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
 	if err != nil {
 		t.Error(err)
 		return
@@ -174,34 +202,28 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithLock") {
 		t.Error("The test function is not found in the profile")
 	}
-
-	<-done
 }
 
 func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	done := make(chan bool)
-
 	go func() {
-		time.Sleep(10 * time.Millisecond)
-		_, err := exec.Command("sleep", "1").Output()
+		time.Sleep(50 * time.Millisecond)
+		_, err := exec.Command("sleep", "0.1").Output()
 		if err != nil {
 			t.Error(err)
 		}
-
-		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(2000)
+	events := agent.blockReporter.readTraceEvents(200)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -215,7 +237,7 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoSysCall)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 2000)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
 	if err != nil {
 		t.Error(err)
 		return
@@ -223,25 +245,25 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 	callGraph.propagate()
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithSyscall") {
 		t.Error("The test function is not found in the profile")
 	}
-
-	<-done
 }
 
 func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	done := make(chan bool)
-
 	// start HTTP server
 	go func() {
+		http.HandleFunc("/ready2", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "OK")
+		})
+
 		http.HandleFunc("/test2", func(w http.ResponseWriter, r *http.Request) {
 			lock := &sync.Mutex{}
 			lock.Lock()
@@ -262,31 +284,20 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 		}
 	}()
 
-	go func() {
-		time.Sleep(10 * time.Millisecond)
+	waitForServer("http://localhost:5002/ready2")
 
-		// request 1
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+
 		res, err := http.Get("http://localhost:5002/test2")
 		if err != nil {
 			t.Error(err)
 		} else {
 			defer res.Body.Close()
 		}
-
-		time.Sleep(10 * time.Millisecond)
-
-		// request 2
-		res, err = http.Get("http://localhost:5002/test2")
-		if err != nil {
-			t.Error(err)
-		} else {
-			defer res.Body.Close()
-		}
-
-		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(1000)
+	events := agent.blockReporter.readTraceEvents(300)
 
 	/*for _, ev := range events {
 		fmt.Printf("\n\n\n\nEVENTS:\n")
@@ -322,7 +333,7 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	callGraph, err := agent.blockReporter.createTraceCallGraph(selectedEvents)
 	if err != nil {
 		t.Error(err)
 		return
@@ -333,25 +344,25 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1.1") {
+	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1") {
 		t.Error("The test function is not found in the profile")
 	}
-
-	<-done
 }
 
 func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	done := make(chan bool)
-
 	// start HTTP server
 	go func() {
+		http.HandleFunc("/ready3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "OK")
+		})
+
 		http.HandleFunc("/test3", func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 
@@ -364,8 +375,10 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 		}
 	}()
 
+	waitForServer("http://localhost:5003/ready3")
+
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		// request
 		res, err := http.Get("http://localhost:5003/test3")
@@ -374,11 +387,9 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 		} else {
 			defer res.Body.Close()
 		}
-
-		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(1000)
+	events := agent.blockReporter.readTraceEvents(200)
 
 	selectorFunc := func(event *pprofTrace.Event) bool {
 		switch event.Type {
@@ -404,7 +415,7 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 		return false
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 1000)
+	callGraph, err := agent.blockReporter.createTraceCallGraph(selectedEvents)
 	if err != nil {
 		t.Error(err)
 		return
@@ -415,13 +426,20 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 
-	if callGraph.measurement < 100 {
+	if callGraph.measurement < 50 {
 		t.Error("Wait time is too low")
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPClient.func2") {
 		t.Error("The test function is not found in the profile")
 	}
+}
 
-	<-done
+func waitForServer(url string) {
+	for {
+		if _, err := http.Get(url); err == nil {
+			time.Sleep(10 * time.Millisecond)
+			break
+		}
+	}
 }
