@@ -80,6 +80,10 @@ func (rs *ReportingStrategy) start() {
 }
 
 func (rs *ReportingStrategy) checkAnomaly() bool {
+	if rs.reporting {
+		return false
+	}
+
 	m := rs.metricFunc()
 	rs.measurements = append(rs.measurements, m)
 	l := len(rs.measurements)
