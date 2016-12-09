@@ -4,36 +4,60 @@ import (
 	"github.com/stackimpact/stackimpact-go/internal"
 )
 
-type Agent struct {
-	internalAgent    *internal.Agent
+const ErrorGroupRecoveredPanics string = "Recovered panics"
+const ErrorGroupUnrecoveredPanics string = "Unrecovered panics"
+const ErrorGroupHandledExceptions string = "Handled exceptions"
+
+type Options struct {
 	DashboardAddress string
+	AgentKey         string
+	AppName          string
+	AppVersion       string
+	AppEnvironment   string
+	HostName         string
+	Debug            bool
+}
+
+type Agent struct {
+	internalAgent *internal.Agent
+
+	// compatibility < 1.2.0
+	DashboardAddress string
+	AgentKey         string
+	AppName          string
 	HostName         string
 	Debug            bool
 }
 
 func NewAgent() *Agent {
 	a := &Agent{
-		internalAgent:    internal.NewAgent(),
-		DashboardAddress: "",
-		HostName:         "",
-		Debug:            false,
+		internalAgent: internal.NewAgent(),
 	}
 
 	return a
 }
 
-func (a *Agent) Configure(agentKey string, appName string) {
-	if a.DashboardAddress != "" {
-		a.internalAgent.DashboardAddress = a.DashboardAddress
-	}
-	if a.HostName != "" {
-		a.internalAgent.HostName = a.HostName
-	}
-	if a.Debug {
-		a.internalAgent.Debug = a.Debug
-	}
+func (a *Agent) Start(options Options) {
+	a.internalAgent.DashboardAddress = options.DashboardAddress
+	a.internalAgent.AgentKey = options.AgentKey
+	a.internalAgent.AppName = options.AppName
+	a.internalAgent.AppVersion = options.AppVersion
+	a.internalAgent.AppEnvironment = options.AppEnvironment
+	a.internalAgent.HostName = options.HostName
+	a.internalAgent.Debug = options.Debug
 
-	a.internalAgent.Configure(agentKey, appName)
+	a.internalAgent.Start()
+}
+
+// compatibility < 1.2.0
+func (a *Agent) Configure(agentKey string, appName string) {
+	a.Start(Options{
+		AgentKey:         agentKey,
+		AppName:          appName,
+		HostName:         a.HostName,
+		DashboardAddress: a.DashboardAddress,
+		Debug:            a.Debug,
+	})
 }
 
 func (a *Agent) MeasureSegment(segmentName string) *Segment {
@@ -48,4 +72,22 @@ func (a *Agent) MeasureSubsegment(segmentName string, subsegmentName string) *Se
 	s.start()
 
 	return s
+}
+
+func (a *Agent) RecordError(err interface{}) {
+	a.internalAgent.RecordError(ErrorGroupHandledExceptions, err, 1)
+}
+
+func (a *Agent) RecordPanic() {
+	if err := recover(); err != nil {
+		a.internalAgent.RecordError(ErrorGroupUnrecoveredPanics, err, 1)
+
+		panic(err)
+	}
+}
+
+func (a *Agent) RecordAndRecoverPanic() {
+	if err := recover(); err != nil {
+		a.internalAgent.RecordError(ErrorGroupRecoveredPanics, err, 1)
+	}
 }

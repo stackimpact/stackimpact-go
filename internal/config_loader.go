@@ -19,8 +19,7 @@ func newConfigLoader(agent *Agent) *ConfigLoader {
 func (cl *ConfigLoader) start() {
 	loadDelay := time.NewTimer(2 * time.Second)
 	go func() {
-		ph := cl.agent.panicHandler()
-		defer ph()
+		defer cl.agent.recoverAndLog()
 
 		<-loadDelay.C
 		cl.load()
@@ -29,8 +28,7 @@ func (cl *ConfigLoader) start() {
 	loadTicker := time.NewTicker(120 * time.Second)
 	go func() {
 		for {
-			ph := cl.agent.panicHandler()
-			defer ph()
+			defer cl.agent.recoverAndLog()
 
 			select {
 			case <-loadTicker.C:

@@ -36,8 +36,7 @@ func (mq *MessageQueue) start() {
 
 	go func() {
 		for {
-			ph := mq.agent.panicHandler()
-			defer ph()
+			defer mq.agent.recoverAndLog()
 
 			select {
 			case <-flushTicker.C:

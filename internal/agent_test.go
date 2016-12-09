@@ -7,8 +7,10 @@ import (
 func TestStart(t *testing.T) {
 	agent := NewAgent()
 	agent.DashboardAddress = "http://localhost:5000"
+	agent.AgentKey = "key"
+	agent.AppName = "GoTestApp"
 	agent.Debug = true
-	agent.Configure("key", "GoTestApp")
+	agent.Start()
 
 	if agent.AgentKey == "" {
 		t.Error("AgentKey not set")

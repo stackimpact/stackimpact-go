@@ -316,8 +316,7 @@ func (br *BlockReporter) adjustTraceDuration() int64 {
 
 	timer := time.NewTimer(10 * time.Millisecond)
 	go func() {
-		ph := br.agent.panicHandler()
-		defer ph()
+		defer br.agent.recoverAndLog()
 
 		<-timer.C
 
@@ -348,8 +347,7 @@ func (br *BlockReporter) readTraceEvents(duration int64) []*pprofTrace.Event {
 
 	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
 	go func() {
-		ph := br.agent.panicHandler()
-		defer ph()
+		defer br.agent.recoverAndLog()
 
 		<-timer.C
 

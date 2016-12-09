@@ -27,6 +27,7 @@ const CategoryLockProfile string = "lock-profile"
 const CategoryHTTPHandlerTrace string = "http-trace"
 const CategoryHTTPClientTrace string = "http-client-trace"
 const CategorySegmentTrace string = "segment-trace"
+const CategoryErrorProfile string = "error-profile"
 
 const NameCPUTime string = "CPU time"
 const NameCPUUsage string = "CPU usage"
@@ -231,7 +232,7 @@ type Metric struct {
 }
 
 func newMetric(agent *Agent, typ string, category string, name string, unit string) *Metric {
-	metricID := sha1String(agent.AppName + agent.HostName + typ + category + name + unit)
+	metricID := sha1String(agent.AppName + agent.AppEnvironment + agent.HostName + typ + category + name + unit)
 
 	m := &Metric{
 		agent:        agent,

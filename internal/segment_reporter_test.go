@@ -11,14 +11,14 @@ func TestRecordSegment(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		go func() {
-			defer agent.RecordSegment([]string{"seg1"}, 10)
+			defer agent.segmentReporter.recordSegment([]string{"seg1"}, 10)
 
 			time.Sleep(10 * time.Millisecond)
 
 			done := make(chan bool)
 
 			go func() {
-				defer agent.RecordSegment([]string{"seg1", "seg2"}, 7)
+				defer agent.segmentReporter.recordSegment([]string{"seg1", "seg2"}, 7)
 
 				time.Sleep(7 * time.Millisecond)
 
@@ -29,7 +29,7 @@ func TestRecordSegment(t *testing.T) {
 		}()
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	segmentGraphs := agent.segmentReporter.segmentGraphs
 	agent.segmentReporter.report("timer")

@@ -2,10 +2,9 @@ package internal
 
 import (
 	"fmt"
-	"testing"
-	//"time"
 	"strconv"
 	"strings"
+	"testing"
 )
 
 func TestCreateCallGraph(t *testing.T) {

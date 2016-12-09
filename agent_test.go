@@ -36,6 +36,8 @@ func TestRecordSegment(t *testing.T) {
 
 	<-done1
 
+	time.Sleep(10 * time.Millisecond)
+
 	if seg1.Duration < 50 {
 		t.Errorf("Duration of seg1 is too low: %v", seg1.Duration)
 	}
@@ -43,4 +45,26 @@ func TestRecordSegment(t *testing.T) {
 	if sub1.Duration < 35 {
 		t.Errorf("Duration of sub1 is too low: %v", sub1.Duration)
 	}
+}
+
+func TestRecoverPanic(t *testing.T) {
+	agent := NewAgent()
+
+	done := make(chan bool)
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				t.Error("panic1 unrecovered")
+			}
+		}()
+		defer agent.RecordAndRecoverPanic()
+		defer func() {
+			done <- true
+		}()
+
+		panic("panic1")
+	}()
+
+	<-done
 }

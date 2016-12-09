@@ -47,13 +47,18 @@ Start the agent by specifying agent key and application name. The agent key can 
 
 ```go
 agent := stackimpact.NewAgent();
-agent.Configure("agent key here", "MyGoApp")
+agent.Start(stackimpact.Options{
+  AgentKey: "agent key here",
+  AppName: "MyGoApp",
+})
 ```
 
-Other initialization options are (set before calling Configure):
-* `agent.DashboardAddress` (Optional) Used by on-premises deployments only.
-* `agent.HostName` (Optional) By default host name will be the OS hostname.
-* `agent.Debug` (Optional) Enables debug logging.
+Other initialization options:
+* `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
+* `AppEnvironment` (Optional) Used to differentiate applications in different environments.
+* `HostName` (Optional) By default host name will be the OS hostname.
+* `Debug` (Optional) Enables debug logging.
+* `DashboardAddress` (Optional) Used by on-premises deployments only.
 
 
 Example:
@@ -74,7 +79,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
   	agent := stackimpact.NewAgent()
-  	agent.Configure("agent key here", "Basic Go Server")
+    agent.Start(stackimpact.Options{
+      AgentKey: "agent key here",
+      AppName: "Basic Go Server",
+      AppVersion: "1.0.0",
+      AppEnvironment: "production",
+    })
 
   	http.HandleFunc("/", handler)
     http.ListenAndServe(":8080", nil)
@@ -97,6 +107,29 @@ defer subsegment.Stop()
 ```
 
 
+#### Monitoring errors (OPTIONAL)
+
+To monitor exceptions and panics with stack traces, the error recording API can be used.
+
+Recording handled errors:
+
+```go
+agent.RecordError(someError)
+```
+
+Recording panics without recovering:
+
+```go
+defer agent.RecordPanic()
+```
+
+Recording and recovering from panics:
+
+```go
+defer agent.RecordAndRecoverPanic()
+```
+
+
 #### Analyzing performance data in the Dashboard
 
 Once your application is restarted, start observing regular and anomaly-triggered CPU, memory, IO, and other hot spot profiles, execution bottlenecks as well as process metrics in the [Dashboard](https://dashboard.stackimpact.com/).
@@ -104,8 +137,9 @@ Once your application is restarted, start observing regular and anomaly-triggere
 
 ## Troubleshooting
 
-To enable debug logging, add `agent.Debug = true` to startup options. If debug log doesn't give you any hints on how to fix a problem, please report it to our support team in your account's Support section.
+To enable debug logging, add `Debug: true` to startup options. If debug log doesn't give you any hints on how to fix a problem, please report it to our support team in your account's Support section.
 
 
 ## Overhead
+
 Reporting CPU, network and system profiles requires regular and anomaly-triggered profiling and tracing activation for short periods of time. Unlike memory profiling and process-level metric reporting, they produce some overhead when active. The agent makes sure the overhead stays within 2% and has no effect on application in any way.

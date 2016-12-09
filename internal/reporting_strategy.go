@@ -39,8 +39,7 @@ func (rs *ReportingStrategy) start() {
 	if rs.metricFunc != nil {
 		anomalyTicker := time.NewTicker(1 * time.Second)
 		go func() {
-			ph := rs.agent.panicHandler()
-			defer ph()
+			defer rs.agent.recoverAndLog()
 
 			for {
 				select {
@@ -56,8 +55,7 @@ func (rs *ReportingStrategy) start() {
 
 	delayTimer := time.NewTimer(time.Duration(rs.delay) * time.Second)
 	go func() {
-		ph := rs.agent.panicHandler()
-		defer ph()
+		defer rs.agent.recoverAndLog()
 
 		<-delayTimer.C
 		rs.executeReport(TriggerTimer)
@@ -65,8 +63,7 @@ func (rs *ReportingStrategy) start() {
 
 		intervalTicker := time.NewTicker(time.Duration(rs.interval) * time.Second)
 		go func() {
-			ph := rs.agent.panicHandler()
-			defer ph()
+			defer rs.agent.recoverAndLog()
 
 			for {
 				select {

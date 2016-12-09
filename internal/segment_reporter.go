@@ -39,6 +39,10 @@ func (sr *SegmentReporter) start() {
 }
 
 func (sr *SegmentReporter) recordSegment(path []string, duration int64) {
+	go sr.recordSegmentSync(path, duration)
+}
+
+func (sr *SegmentReporter) recordSegmentSync(path []string, duration int64) {
 	if len(path) == 0 || len(path) > 5 {
 		sr.agent.log("Invalid segment path, length=%v", len(path))
 		return

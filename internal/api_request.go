@@ -30,6 +30,8 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 		"runtime_version": runtime.Version(),
 		"agent_version":   AgentVersion,
 		"app_name":        ar.agent.AppName,
+		"app_version":     ar.agent.AppVersion,
+		"app_environment": ar.agent.AppEnvironment,
 		"host_name":       ar.agent.HostName,
 		"run_id":          ar.agent.runId,
 		"run_ts":          ar.agent.runTs,

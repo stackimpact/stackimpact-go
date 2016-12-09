@@ -1,16 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"sync"
 	"time"
-	"math/rand"
 
 	"github.com/stackimpact/stackimpact-go"
 )
@@ -66,14 +67,13 @@ func simulateMemoryLeak() {
 		for {
 			select {
 			case <-constantTicker.C:
-				leakMemory(2 * 3600, 1000)
+				leakMemory(2*3600, 1000)
 			}
 		}
 	}()
 
-	go leakMemory(2 * 3600, 1000)
+	go leakMemory(2*3600, 1000)
 }
-
 
 func simulateChannelWait() {
 	for {
@@ -99,7 +99,6 @@ func simulateChannelWait() {
 	}
 }
 
-
 func simulateNetworkWait() {
 	// start HTTP server
 	go func() {
@@ -121,7 +120,6 @@ func simulateNetworkWait() {
 		}
 	}()
 
-
 	requestTicker := time.NewTicker(500 * time.Millisecond)
 	for {
 		select {
@@ -133,7 +131,6 @@ func simulateNetworkWait() {
 		}
 	}
 }
-
 
 func simulateSyscallWait() {
 	for {
@@ -178,56 +175,102 @@ func simulateLockWait() {
 	}
 }
 
-
-
 func simulateSegments(agent *stackimpact.Agent) {
 	for {
-			done1 := make(chan bool)
+		done1 := make(chan bool)
+
+		go func() {
+			segment := agent.MeasureSegment("Segment1")
+			defer segment.Stop()
+
+			done2 := make(chan bool)
 
 			go func() {
-				segment := agent.MeasureSegment("Segment1")
-				defer segment.Stop()
+				subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
+				defer subsegment.Stop()
 
-				done2 := make(chan bool)
+				time.Sleep(time.Duration(50+rand.Intn(20)) * time.Millisecond)
 
-				go func() {
-					subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
-					defer subsegment.Stop()
-
-					time.Sleep(time.Duration(50 + rand.Intn(20)) * time.Millisecond)
-
-					done2 <- true
-				}()
-
-				<-done2
-
-				go func() {
-					subsegment := agent.MeasureSubsegment("Segment1", "Subsegment2")
-					defer subsegment.Stop()
-
-					time.Sleep(time.Duration(20 + rand.Intn(10)) * time.Millisecond)
-
-					done2 <- true
-				}()
-
-				<-done2
-
-				done1 <- true
+				done2 <- true
 			}()
 
-			<-done1
+			<-done2
+
+			go func() {
+				subsegment := agent.MeasureSubsegment("Segment1", "Subsegment2")
+				defer subsegment.Stop()
+
+				time.Sleep(time.Duration(20+rand.Intn(10)) * time.Millisecond)
+
+				done2 <- true
+			}()
+
+			<-done2
+
+			done1 <- true
+		}()
+
+		<-done1
 	}
+}
+
+func simulateErrors(agent *stackimpact.Agent) {
+	go func() {
+		for {
+			agent.RecordError(errors.New("A handled exception"))
+
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
+	go func() {
+		for {
+			agent.RecordError(errors.New("A handled exception"))
+
+			time.Sleep(10 * time.Second)
+		}
+	}()
+
+	go func() {
+		for {
+			go func() {
+				defer agent.RecordAndRecoverPanic()
+
+				panic("A recovered panic")
+			}()
+
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	go func() {
+		for {
+			go func() {
+				defer func() {
+					if err := recover(); err != nil {
+						// recover from unrecovered panic
+					}
+				}()
+				defer agent.RecordPanic()
+
+				panic("An unrecovered panic")
+			}()
+
+			time.Sleep(7 * time.Second)
+		}
+	}()
+
 }
 
 func main() {
 	// StackImpact initialization
 	agent := stackimpact.NewAgent()
-	agent.Debug = true
-	// Overwrite dashboard (onprem only)
-	if os.Getenv("DASHBOARD_ADDRESS") != "" {
-		agent.DashboardAddress = os.Getenv("DASHBOARD_ADDRESS")
-	}
-	agent.Configure(os.Getenv("AGENT_KEY"), "ExampleGoApp")
+	agent.Start(stackimpact.Options{
+		AgentKey:         os.Getenv("AGENT_KEY"),
+		AppName:          "ExampleGoApp",
+		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // on-premises only
+		Debug:            true,
+	})
 	// end StackImpact initialization
 
 	go simulateCPUUsage()
@@ -237,6 +280,7 @@ func main() {
 	go simulateSyscallWait()
 	go simulateLockWait()
 	go simulateSegments(agent)
+	go simulateErrors(agent)
 
 	select {}
 }

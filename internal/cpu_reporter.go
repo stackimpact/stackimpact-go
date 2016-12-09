@@ -130,8 +130,7 @@ func (cr *CPUReporter) readCPUProfile(duration int64) *profile.Profile {
 
 	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
 	go func() {
-		ph := cr.agent.panicHandler()
-		defer ph()
+		defer cr.agent.recoverAndLog()
 
 		<-timer.C
 

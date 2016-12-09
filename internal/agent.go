@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.1.6"
+const AgentVersion = "1.2.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
-var agentConfigured bool = false
+var agentStarted bool = false
 
 type Agent struct {
 	nextId             int64
@@ -29,11 +29,14 @@ type Agent struct {
 	allocationReporter *AllocationReporter
 	blockReporter      *BlockReporter
 	segmentReporter    *SegmentReporter
+	errorReporter      *ErrorReporter
 
 	// Options
 	DashboardAddress string
 	AgentKey         string
 	AppName          string
+	AppVersion       string
+	AppEnvironment   string
 	HostName         string
 	Debug            bool
 	disableProfiling bool
@@ -53,12 +56,16 @@ func NewAgent() *Agent {
 		allocationReporter: nil,
 		blockReporter:      nil,
 		segmentReporter:    nil,
-		DashboardAddress:   SAASDashboardAddress,
-		AgentKey:           "",
-		AppName:            "",
-		HostName:           "",
-		Debug:              false,
-		disableProfiling:   false,
+		errorReporter:      nil,
+
+		DashboardAddress: SAASDashboardAddress,
+		AgentKey:         "",
+		AppName:          "",
+		AppVersion:       "",
+		AppEnvironment:   "",
+		HostName:         "",
+		Debug:            false,
+		disableProfiling: false,
 	}
 
 	a.runId = a.uuid()
@@ -71,19 +78,17 @@ func NewAgent() *Agent {
 	a.allocationReporter = newAllocationReporter(a)
 	a.blockReporter = newBlockReporter(a)
 	a.segmentReporter = newSegmentReporter(a)
+	a.errorReporter = newErrorReporter(a)
 
 	return a
 }
 
-func (a *Agent) Configure(agentKey string, appName string) {
-	if agentConfigured {
+func (a *Agent) Start() {
+	if agentStarted {
 		a.log("Agent configuration failed. Another agent has already been initialized.")
 		return
 	}
-	agentConfigured = true
-
-	a.AgentKey = agentKey
-	a.AppName = appName
+	agentStarted = true
 
 	if a.HostName == "" {
 		hostName, err := os.Hostname()
@@ -100,6 +105,7 @@ func (a *Agent) Configure(agentKey string, appName string) {
 	a.allocationReporter.start()
 	a.blockReporter.start()
 	a.segmentReporter.start()
+	a.errorReporter.start()
 
 	a.log("Agent started.")
 
@@ -107,7 +113,27 @@ func (a *Agent) Configure(agentKey string, appName string) {
 }
 
 func (a *Agent) RecordSegment(path []string, duration int64) {
-	go a.segmentReporter.recordSegment(path, duration)
+	if !agentStarted {
+		return
+	}
+
+	a.segmentReporter.recordSegment(path, duration)
+}
+
+func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
+	if !agentStarted {
+		return
+	}
+
+	var err error
+	switch v := msg.(type) {
+	case error:
+		err = v
+	default:
+		err = fmt.Errorf("%v", v)
+	}
+
+	a.errorReporter.recordError(group, err, skipFrames+1)
 }
 
 func (a *Agent) log(format string, values ...interface{}) {
@@ -126,11 +152,9 @@ func (a *Agent) error(err error) {
 	}
 }
 
-func (a *Agent) panicHandler() func() {
-	return func() {
-		if r := recover(); r != nil {
-			a.log("Recovered from panic in agent: %v", r)
-		}
+func (a *Agent) recoverAndLog() {
+	if err := recover(); err != nil {
+		a.log("Recovered from panic in agent: %v", err)
 	}
 }
 

@@ -26,8 +26,7 @@ func (pr *ProcessReporter) start() {
 	collectTicker := time.NewTicker(1 * time.Minute)
 
 	go func() {
-		ph := pr.agent.panicHandler()
-		defer ph()
+		defer pr.agent.recoverAndLog()
 
 		for {
 			select {
