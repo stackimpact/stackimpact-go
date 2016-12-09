@@ -38,13 +38,28 @@ func NewAgent() *Agent {
 }
 
 func (a *Agent) Start(options Options) {
-	a.internalAgent.DashboardAddress = options.DashboardAddress
 	a.internalAgent.AgentKey = options.AgentKey
 	a.internalAgent.AppName = options.AppName
-	a.internalAgent.AppVersion = options.AppVersion
-	a.internalAgent.AppEnvironment = options.AppEnvironment
-	a.internalAgent.HostName = options.HostName
-	a.internalAgent.Debug = options.Debug
+
+	if options.AppVersion != "" {
+		a.internalAgent.AppVersion = options.AppVersion
+	}
+
+	if options.AppEnvironment != "" {
+		a.internalAgent.AppEnvironment = options.AppEnvironment
+	}
+
+	if options.HostName != "" {
+		a.internalAgent.HostName = options.HostName
+	}
+
+	if options.DashboardAddress != "" {
+		a.internalAgent.DashboardAddress = options.DashboardAddress
+	}
+
+	if options.Debug {
+		a.internalAgent.Debug = options.Debug
+	}
 
 	a.internalAgent.Start()
 }
