@@ -268,6 +268,7 @@ func main() {
 	agent.Start(stackimpact.Options{
 		AgentKey:         os.Getenv("AGENT_KEY"),
 		AppName:          "ExampleGoApp",
+		AppVersion:       "1.0.0",
 		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // on-premises only
 		Debug:            true,
 	})

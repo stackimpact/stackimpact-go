@@ -8,6 +8,7 @@ Main features:
 
 * Automatic hot spot profiling for CPU, memory allocations, network, system calls and lock contention.
 * Automatic bottleneck tracing for HTTP handlers and HTTP clients.
+* Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
 * Alerts on hot spot anomalies.
 * Multiple account users for team collaboration.
@@ -20,7 +21,7 @@ StackImpact agent (this package) reports performance information to the Dashboar
 
 ## Requirements
 
-Linux or OS X. Go version 1.5+.
+Linux, OS X or Windows. Go version 1.5+.
 
 
 ## Getting started
@@ -48,8 +49,8 @@ Start the agent by specifying agent key and application name. The agent key can 
 ```go
 agent := stackimpact.NewAgent();
 agent.Start(stackimpact.Options{
-  AgentKey: "agent key here",
-  AppName: "MyGoApp",
+    AgentKey: "agent key here",
+    AppName: "MyGoApp",
 })
 ```
 
@@ -80,13 +81,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func main() {
   	agent := stackimpact.NewAgent()
     agent.Start(stackimpact.Options{
-      AgentKey: "agent key here",
-      AppName: "Basic Go Server",
-      AppVersion: "1.0.0",
-      AppEnvironment: "production",
+        AgentKey: "agent key here",
+        AppName: "Basic Go Server",
+        AppVersion: "1.0.0",
+        AppEnvironment: "production",
     })
 
-  	http.HandleFunc("/", handler)
+    http.HandleFunc("/", handler)
     http.ListenAndServe(":8080", nil)
 }
 ```
