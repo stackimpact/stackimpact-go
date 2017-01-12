@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"regexp"
 	"runtime"
 	"runtime/trace"
 	"strings"
@@ -33,7 +34,7 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 		reportingStrategy: nil,
 	}
 
-	br.reportingStrategy = newReportingStrategy(agent, 30, 300,
+	br.reportingStrategy = newReportingStrategy(agent, 60, 300,
 		func() float64 {
 			return float64(runtime.NumGoroutine())
 		},
@@ -55,84 +56,96 @@ func (br *BlockReporter) report(trigger string) {
 		return
 	}
 
-	var selectedEvents []*pprofTrace.Event
-	var filterFunc filterFuncType
-	var selectorFunc selectorFuncType
-
 	duration := br.adjustTraceDuration()
 	br.agent.log("Starting trace profiler for %v milliseconds...", duration)
 	events := br.readTraceEvents(duration)
 	br.agent.log("Trace profiler stopped.")
 
-	// channels
-	selectorFunc = func(event *pprofTrace.Event) bool {
+	br.reportChannelProfile(trigger, events, duration)
+	br.reportNetworkProfile(trigger, events, duration)
+	br.reportSystemProfile(trigger, events, duration)
+	br.reportLockProfile(trigger, events, duration)
+	br.reportHTTPHandlerTrace(trigger, events)
+	br.reportHTTPClientTrace(trigger, events)
+	br.reportSQLStatementTrace(trigger, events)
+	br.reportMongoDBCallTrace(trigger, events)
+	br.reportRedisCallTrace(trigger, events)
+}
+
+func (br *BlockReporter) reportChannelProfile(trigger string, events []*pprofTrace.Event, duration int64) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		return (event.Type == pprofTrace.EvGoBlockRecv)
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
+	selectedEvents := selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(2, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryChannelProfile, NameChannelWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+}
 
-	// network
-	selectorFunc = func(event *pprofTrace.Event) bool {
+func (br *BlockReporter) reportNetworkProfile(trigger string, events []*pprofTrace.Event, duration int64) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		return (event.Type == pprofTrace.EvGoBlockNet)
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
-	filterFunc = func(funcName string) bool {
+	selectedEvents := selectEvents(events, selectorFunc)
+	filterFunc := func(funcName string) bool {
 		return !strings.Contains(funcName, "AcceptTCP")
 	}
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, filterFunc, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(2, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryNetworkProfile, NameNetworkWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+}
 
-	// system
-	selectorFunc = func(event *pprofTrace.Event) bool {
+func (br *BlockReporter) reportSystemProfile(trigger string, events []*pprofTrace.Event, duration int64) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		return (event.Type == pprofTrace.EvGoSysCall)
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
+	selectedEvents := selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(5, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategorySystemProfile, NameSystemWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+}
 
-	// locks
-	selectorFunc = func(event *pprofTrace.Event) bool {
+func (br *BlockReporter) reportLockProfile(trigger string, events []*pprofTrace.Event, duration int64) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		return (event.Type == pprofTrace.EvGoBlockSync)
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
+	selectedEvents := selectEvents(events, selectorFunc)
 	if callGraph, err := br.createBlockCallGraph(selectedEvents, nil, duration); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(2, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeProfile, CategoryLockProfile, NameLockWaitTime, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
-	// HTTP handler traces
-	selectorFunc = func(event *pprofTrace.Event) bool {
+}
+
+func (br *BlockReporter) reportHTTPHandlerTrace(trigger string, events []*pprofTrace.Event) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		l := len(event.Stk)
 
 		switch event.Type {
@@ -153,21 +166,22 @@ func (br *BlockReporter) report(trigger string) {
 			event.Stk[l-1].Fn == "net/http.(*conn).serve" &&
 			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
+	selectedEvents := selectEvents(events, selectorFunc)
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.evaluateP95()
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(5, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeTrace, CategoryHTTPHandlerTrace, NameHTTPTransactions, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+}
 
-	// HTTP client traces
-	selectorFunc = func(event *pprofTrace.Event) bool {
+func (br *BlockReporter) reportHTTPClientTrace(trigger string, events []*pprofTrace.Event) {
+	selectorFunc := func(event *pprofTrace.Event) bool {
 		switch event.Type {
 		case
 			pprofTrace.EvGoBlockNet,
@@ -190,15 +204,133 @@ func (br *BlockReporter) report(trigger string) {
 
 		return false
 	}
-	selectedEvents = selectEvents(events, selectorFunc)
+	selectedEvents := selectEvents(events, selectorFunc)
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
 		callGraph.evaluateP95()
 		callGraph.propagate()
-		callGraph.filter(1, math.Inf(0))
+		callGraph.filter(5, 1, math.Inf(0))
 
 		metric := newMetric(br.agent, TypeTrace, CategoryHTTPClientTrace, NameHTTPCalls, UnitMillisecond)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+}
+
+func (br *BlockReporter) reportSQLStatementTrace(trigger string, events []*pprofTrace.Event) {
+	selectorRe := regexp.MustCompile(`^database\/sql\.\(\*(DB|Stmt|Tx|Rows)\)\.[A-Z]`)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		for _, f := range event.Stk {
+			if selectorRe.MatchString(f.Fn) {
+				return true
+			}
+		}
+
+		return false
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
+	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
+		br.agent.error(err)
+	} else {
+		callGraph.evaluateP95()
+		callGraph.propagate()
+		callGraph.filter(5, 1, math.Inf(0))
+
+		metric := newMetric(br.agent, TypeTrace, CategoryDBClientTrace, NameSQLStatements, UnitMillisecond)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+}
+
+func (br *BlockReporter) reportMongoDBCallTrace(trigger string, events []*pprofTrace.Event) {
+	selectorRe := regexp.MustCompile(`^gopkg\.in\/mgo%2ev2\.\(\*\w+\)\.[A-Z]`)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		for _, f := range event.Stk {
+			if selectorRe.MatchString(f.Fn) {
+				return true
+			}
+		}
+
+		return false
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
+	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
+		br.agent.error(err)
+	} else {
+		callGraph.evaluateP95()
+		callGraph.propagate()
+		callGraph.filter(5, 1, math.Inf(0))
+
+		metric := newMetric(br.agent, TypeTrace, CategoryDBClientTrace, NameMongoDBCalls, UnitMillisecond)
+		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+}
+
+func (br *BlockReporter) reportRedisCallTrace(trigger string, events []*pprofTrace.Event) {
+	redigoSelectorRe := regexp.MustCompile(`^github\.com\/garyburd\/redigo\/redis\.\(\*conn\)\.[A-Z]`)
+	goredisSelectorRe := regexp.MustCompile(`^gopkg\.in\/redis%2ev5\.\(\*\w+\)\.[A-Z]`)
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+		default:
+			return false
+		}
+
+		for _, f := range event.Stk {
+			if redigoSelectorRe.MatchString(f.Fn) || goredisSelectorRe.MatchString(f.Fn) {
+				return true
+			}
+		}
+
+		return false
+	}
+	selectedEvents := selectEvents(events, selectorFunc)
+	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
+		br.agent.error(err)
+	} else {
+		callGraph.evaluateP95()
+		callGraph.propagate()
+		callGraph.filter(5, 1, math.Inf(0))
+
+		metric := newMetric(br.agent, TypeTrace, CategoryDBClientTrace, NameRedisCalls, UnitMillisecond)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		br.agent.messageQueue.addMessage("metric", metric.toMap())
 	}

@@ -50,7 +50,7 @@ func TestBreakdownFilter(t *testing.T) {
 	child2child1.measurement = 1
 	child2.addChild(child2child1)
 
-	root.filter(3, 100)
+	root.filter(2, 3, 100)
 
 	if root.findChild("child1") == nil {
 		t.Errorf("child1 should not be filtered")

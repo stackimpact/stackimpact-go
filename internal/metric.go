@@ -26,6 +26,7 @@ const CategorySystemProfile string = "system-profile"
 const CategoryLockProfile string = "lock-profile"
 const CategoryHTTPHandlerTrace string = "http-trace"
 const CategoryHTTPClientTrace string = "http-client-trace"
+const CategoryDBClientTrace string = "db-client-trace"
 const CategorySegmentTrace string = "segment-trace"
 const CategoryErrorProfile string = "error-profile"
 
@@ -48,6 +49,9 @@ const NameSystemWaitTime string = "System wait time"
 const NameLockWaitTime string = "Lock wait time"
 const NameHTTPTransactions string = "HTTP Transactions"
 const NameHTTPCalls string = "HTTP Calls"
+const NameSQLStatements string = "SQL Statements"
+const NameMongoDBCalls string = "MongoDB Calls"
+const NameRedisCalls string = "Redis Calls"
 
 const UnitNone string = ""
 const UnitMillisecond string = "millisecond"
@@ -126,12 +130,16 @@ func (bn *BreakdownNode) findOrAddChild(name string) *BreakdownNode {
 	return child
 }
 
-func (bn *BreakdownNode) filter(min float64, max float64) {
+func (bn *BreakdownNode) filter(fromLevel int, min float64, max float64) {
+	bn.filterLevel(1, fromLevel, min, max)
+}
+
+func (bn *BreakdownNode) filterLevel(currentLevel int, fromLevel int, min float64, max float64) {
 	for key, child := range bn.children {
-		if bn.name != "root" && (child.measurement < min || child.measurement > max) {
+		if currentLevel >= fromLevel && (child.measurement < min || child.measurement > max) {
 			delete(bn.children, key)
 		} else {
-			child.filter(min, max)
+			child.filterLevel(currentLevel+1, fromLevel, min, max)
 		}
 	}
 }

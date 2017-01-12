@@ -24,7 +24,7 @@ func newCPUReporter(agent *Agent) *CPUReporter {
 	}
 
 	baseCpuTime, _ := readCPUTime()
-	cr.reportingStrategy = newReportingStrategy(agent, 60, 300,
+	cr.reportingStrategy = newReportingStrategy(agent, 45, 300,
 		func() float64 {
 			cpuTime, _ := readCPUTime()
 			cpuUsage := float64(int((cpuTime - baseCpuTime) / 1e6))
@@ -57,7 +57,7 @@ func (cr *CPUReporter) report(trigger string) {
 		cr.agent.error(err)
 	} else {
 		// filter calls with lower than 1% CPU stake
-		callGraph.filter(1, 100)
+		callGraph.filter(2, 1, 100)
 
 		metric := newMetric(cr.agent, TypeProfile, CategoryCPUProfile, NameCPUUsage, UnitPercent)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)

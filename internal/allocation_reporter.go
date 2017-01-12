@@ -38,7 +38,7 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 		reportingStrategy: nil,
 	}
 
-	ar.reportingStrategy = newReportingStrategy(agent, 45, 300,
+	ar.reportingStrategy = newReportingStrategy(agent, 30, 300,
 		func() float64 {
 			memAlloc := readMemAlloc()
 			return float64(int64(memAlloc / 1e6))
@@ -72,7 +72,7 @@ func (ar *AllocationReporter) report(trigger string) {
 		ar.agent.error(err)
 	} else {
 		// filter calls with lower than 10KB
-		callGraph.filter(10000, math.Inf(0))
+		callGraph.filter(2, 10000, math.Inf(0))
 
 		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameAllocatedSize, UnitByte)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
