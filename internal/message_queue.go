@@ -40,7 +40,11 @@ func (mq *MessageQueue) start() {
 
 			select {
 			case <-flushTicker.C:
-				if len(mq.queue) > 0 && (mq.lastUploadTimestamp+int64(mq.backoffSeconds) < time.Now().Unix()) {
+				mq.queueLock.Lock()
+				l := len(mq.queue)
+				mq.queueLock.Unlock()
+
+				if l > 0 && (mq.lastUploadTimestamp+int64(mq.backoffSeconds) < time.Now().Unix()) {
 					mq.expire()
 					mq.flush()
 				}

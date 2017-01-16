@@ -14,7 +14,6 @@ type ReportingStrategy struct {
 	interval        int
 	metricFunc      metricFuncType
 	reportFunc      reportFuncType
-	reporting       bool
 	anomalyReported bool
 	measurements    []float64
 }
@@ -26,7 +25,6 @@ func newReportingStrategy(agent *Agent, delay int, interval int, metricFunc metr
 		interval:        interval,
 		metricFunc:      metricFunc,
 		reportFunc:      reportFunc,
-		reporting:       false,
 		anomalyReported: false,
 		measurements:    make([]float64, 0),
 	}
@@ -77,7 +75,7 @@ func (rs *ReportingStrategy) start() {
 }
 
 func (rs *ReportingStrategy) checkAnomaly() bool {
-	if rs.reporting {
+	if rs.agent.isProfilingActive() {
 		return false
 	}
 
@@ -122,11 +120,13 @@ func stdev(numbers []float64) (float64, float64) {
 }
 
 func (rs *ReportingStrategy) executeReport(trigger string) {
-	if !rs.reporting {
-		rs.agent.overheadLock.Lock()
-		rs.reporting = true
-		rs.reportFunc(trigger)
-		rs.reporting = false
-		rs.agent.overheadLock.Unlock()
-	}
+	rs.agent.profilingLock.Lock()
+	rs.agent.profilingActive = true
+
+	defer func() {
+		rs.agent.profilingActive = false
+		rs.agent.profilingLock.Unlock()
+	}()
+
+	rs.reportFunc(trigger)
 }

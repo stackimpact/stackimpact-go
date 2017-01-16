@@ -8,10 +8,11 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-const AgentVersion = "1.2.3"
+const AgentVersion = "1.2.4"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -20,8 +21,8 @@ type Agent struct {
 	nextId             int64
 	runId              string
 	runTs              int64
-	overheadLock       *sync.Mutex
 	apiRequest         *APIRequest
+	config             *Config
 	configLoader       *ConfigLoader
 	messageQueue       *MessageQueue
 	processReporter    *ProcessReporter
@@ -31,6 +32,10 @@ type Agent struct {
 	segmentReporter    *SegmentReporter
 	errorReporter      *ErrorReporter
 
+	// Syncronization
+	profilingLock   *sync.RWMutex
+	profilingActive bool
+
 	// Options
 	DashboardAddress string
 	AgentKey         string
@@ -39,7 +44,6 @@ type Agent struct {
 	AppEnvironment   string
 	HostName         string
 	Debug            bool
-	disableProfiling bool
 }
 
 func NewAgent() *Agent {
@@ -47,8 +51,8 @@ func NewAgent() *Agent {
 		nextId:             0,
 		runId:              "",
 		runTs:              time.Now().Unix(),
-		overheadLock:       &sync.Mutex{},
 		apiRequest:         nil,
+		config:             nil,
 		configLoader:       nil,
 		messageQueue:       nil,
 		processReporter:    nil,
@@ -58,6 +62,9 @@ func NewAgent() *Agent {
 		segmentReporter:    nil,
 		errorReporter:      nil,
 
+		profilingLock:   &sync.RWMutex{},
+		profilingActive: false,
+
 		DashboardAddress: SAASDashboardAddress,
 		AgentKey:         "",
 		AppName:          "",
@@ -65,12 +72,12 @@ func NewAgent() *Agent {
 		AppEnvironment:   "",
 		HostName:         "",
 		Debug:            false,
-		disableProfiling: false,
 	}
 
 	a.runId = a.uuid()
 
 	a.apiRequest = newAPIRequest(a)
+	a.config = newConfig(a)
 	a.configLoader = newConfigLoader(a)
 	a.messageQueue = newMessageQueue(a)
 	a.processReporter = newProcessReporter(a)
@@ -136,6 +143,20 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	a.errorReporter.recordError(group, err, skipFrames+1)
 }
 
+func (a *Agent) setProfilingActive(val bool) {
+	a.profilingLock.Lock()
+	defer a.profilingLock.Unlock()
+
+	a.profilingActive = val
+}
+
+func (a *Agent) isProfilingActive() bool {
+	a.profilingLock.RLock()
+	defer a.profilingLock.RUnlock()
+
+	return a.profilingActive
+}
+
 func (a *Agent) log(format string, values ...interface{}) {
 	if a.Debug {
 		fmt.Printf("["+time.Now().Format(time.StampMilli)+"]"+
@@ -159,12 +180,12 @@ func (a *Agent) recoverAndLog() {
 }
 
 func (a *Agent) uuid() string {
-	a.nextId++
+	n := atomic.AddInt64(&a.nextId, 1)
 
 	uuid :=
 		strconv.FormatInt(time.Now().Unix(), 10) +
 			strconv.Itoa(rand.Intn(1000000000)) +
-			strconv.FormatInt(a.nextId, 10)
+			strconv.FormatInt(n, 10)
 
 	return sha1String(uuid)
 }

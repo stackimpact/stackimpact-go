@@ -43,9 +43,9 @@ func (cl *ConfigLoader) load() {
 	if config, err := cl.agent.apiRequest.post("config", payload); err == nil {
 		// profiling_enabled yes|no
 		if profilingDisabled, exists := config["profiling_disabled"]; exists {
-			cl.agent.disableProfiling = (profilingDisabled.(string) == "yes")
+			cl.agent.config.setProfilingDisabled(profilingDisabled.(string) == "yes")
 		} else {
-			cl.agent.disableProfiling = false
+			cl.agent.config.setProfilingDisabled(false)
 		}
 	} else {
 		cl.agent.log("Error loading config from Dashboard")

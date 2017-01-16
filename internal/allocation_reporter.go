@@ -57,7 +57,7 @@ func (ar *AllocationReporter) start() {
 }
 
 func (ar *AllocationReporter) report(trigger string) {
-	if ar.agent.disableProfiling {
+	if ar.agent.config.isProfilingDisabled() {
 		return
 	}
 

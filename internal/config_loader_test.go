@@ -22,7 +22,7 @@ func TestConfigLoad(t *testing.T) {
 
 	agent.configLoader.load()
 
-	if !agent.disableProfiling {
+	if !agent.config.isProfilingDisabled() {
 		t.Errorf("Config loading wasn't successful")
 	}
 }

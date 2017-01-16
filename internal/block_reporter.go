@@ -52,7 +52,7 @@ func (br *BlockReporter) start() {
 }
 
 func (br *BlockReporter) report(trigger string) {
-	if br.agent.disableProfiling {
+	if br.agent.config.isProfilingDisabled() {
 		return
 	}
 
@@ -167,6 +167,10 @@ func (br *BlockReporter) reportHTTPHandlerTrace(trigger string, events []*pprofT
 			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
+	if len(selectedEvents) == 0 {
+		return
+	}
+
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
@@ -205,6 +209,10 @@ func (br *BlockReporter) reportHTTPClientTrace(trigger string, events []*pprofTr
 		return false
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
+	if len(selectedEvents) == 0 {
+		return
+	}
+
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
@@ -244,6 +252,10 @@ func (br *BlockReporter) reportSQLStatementTrace(trigger string, events []*pprof
 		return false
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
+	if len(selectedEvents) == 0 {
+		return
+	}
+
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
@@ -283,6 +295,10 @@ func (br *BlockReporter) reportMongoDBCallTrace(trigger string, events []*pprofT
 		return false
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
+	if len(selectedEvents) == 0 {
+		return
+	}
+
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {
@@ -323,6 +339,10 @@ func (br *BlockReporter) reportRedisCallTrace(trigger string, events []*pprofTra
 		return false
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
+	if len(selectedEvents) == 0 {
+		return
+	}
+
 	if callGraph, err := br.createTraceCallGraph(selectedEvents); err != nil {
 		br.agent.error(err)
 	} else {

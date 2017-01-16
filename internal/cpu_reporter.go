@@ -45,7 +45,7 @@ func (cr *CPUReporter) start() {
 }
 
 func (cr *CPUReporter) report(trigger string) {
-	if cr.agent.disableProfiling {
+	if cr.agent.config.isProfilingDisabled() {
 		return
 	}
 
