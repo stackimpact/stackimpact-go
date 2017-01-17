@@ -269,7 +269,7 @@ func simulateErrors(agent *stackimpact.Agent) {
 }
 
 func simulateSQL() {
-	db, err := sql.Open("mysql", "test:test@localhost/test")
+	db, err := sql.Open("mysql", "test:test@/test")
 	if err != nil {
 		panic(err.Error())
 	}

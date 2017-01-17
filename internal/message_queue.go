@@ -69,7 +69,7 @@ func (mq *MessageQueue) expire() {
 func (mq *MessageQueue) flush() {
 	mq.queueLock.Lock()
 	outgoing := mq.queue
-	mq.queue = mq.queue[:0]
+	mq.queue = make([]Message, 0)
 	mq.queueLock.Unlock()
 
 	messages := make([]interface{}, 0)
