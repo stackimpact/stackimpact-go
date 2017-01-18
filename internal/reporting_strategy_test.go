@@ -75,8 +75,8 @@ func TestAnomalyReport(t *testing.T) {
 			t.Error("report func was not called")
 		}
 
-		if !rs.anomalyReported {
-			t.Error("anomalyReported is false after reporting")
+		if rs.readAnomalyCounter() < 1 {
+			t.Error("anomalyCounter is 0 after reporting")
 		}
 
 		done <- true

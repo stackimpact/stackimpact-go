@@ -3,6 +3,7 @@ package internal
 import (
 	"math"
 	"time"
+	"sync/atomic"
 )
 
 type metricFuncType func() float64
@@ -14,7 +15,7 @@ type ReportingStrategy struct {
 	interval        int
 	metricFunc      metricFuncType
 	reportFunc      reportFuncType
-	anomalyReported bool
+	anomalyCounter  int32
 	measurements    []float64
 }
 
@@ -25,11 +26,23 @@ func newReportingStrategy(agent *Agent, delay int, interval int, metricFunc metr
 		interval:        interval,
 		metricFunc:      metricFunc,
 		reportFunc:      reportFunc,
-		anomalyReported: false,
+		anomalyCounter:  0,
 		measurements:    make([]float64, 0),
 	}
 
 	return rs
+}
+
+func (rs *ReportingStrategy) readAnomalyCounter() int32 {
+	return atomic.LoadInt32(&rs.anomalyCounter)
+}
+
+func (rs *ReportingStrategy) incAnomalyCounter() int32 {
+	return atomic.AddInt32(&rs.anomalyCounter, 1)
+}
+
+func (rs *ReportingStrategy) resetAnomalyCounter() {
+	atomic.StoreInt32(&rs.anomalyCounter, 0)
 }
 
 func (rs *ReportingStrategy) start() {
@@ -42,9 +55,9 @@ func (rs *ReportingStrategy) start() {
 			for {
 				select {
 				case <-anomalyTicker.C:
-					if rs.checkAnomaly() && !rs.anomalyReported {
+					if rs.checkAnomaly() && rs.readAnomalyCounter() < 1 {
+						rs.incAnomalyCounter()
 						rs.executeReport(TriggerAnomaly)
-						rs.anomalyReported = true
 					}
 				}
 			}
@@ -57,7 +70,7 @@ func (rs *ReportingStrategy) start() {
 
 		<-delayTimer.C
 		rs.executeReport(TriggerTimer)
-		rs.anomalyReported = false
+		rs.resetAnomalyCounter()
 
 		intervalTicker := time.NewTicker(time.Duration(rs.interval) * time.Second)
 		go func() {
@@ -67,7 +80,7 @@ func (rs *ReportingStrategy) start() {
 				select {
 				case <-intervalTicker.C:
 					rs.executeReport(TriggerTimer)
-					rs.anomalyReported = false
+					rs.resetAnomalyCounter()
 				}
 			}
 		}()
