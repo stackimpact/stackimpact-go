@@ -2,32 +2,32 @@ package internal
 
 import (
 	"math"
-	"time"
 	"sync/atomic"
+	"time"
 )
 
 type metricFuncType func() float64
 type reportFuncType func(trigger string)
 
 type ReportingStrategy struct {
-	agent           *Agent
-	delay           int
-	interval        int
-	metricFunc      metricFuncType
-	reportFunc      reportFuncType
-	anomalyCounter  int32
-	measurements    []float64
+	agent          *Agent
+	delay          int
+	interval       int
+	metricFunc     metricFuncType
+	reportFunc     reportFuncType
+	anomalyCounter int32
+	measurements   []float64
 }
 
 func newReportingStrategy(agent *Agent, delay int, interval int, metricFunc metricFuncType, reportFunc reportFuncType) *ReportingStrategy {
 	rs := &ReportingStrategy{
-		agent:           agent,
-		delay:           delay,
-		interval:        interval,
-		metricFunc:      metricFunc,
-		reportFunc:      reportFunc,
-		anomalyCounter:  0,
-		measurements:    make([]float64, 0),
+		agent:          agent,
+		delay:          delay,
+		interval:       interval,
+		metricFunc:     metricFunc,
+		reportFunc:     reportFunc,
+		anomalyCounter: 0,
+		measurements:   make([]float64, 0),
 	}
 
 	return rs

@@ -35,3 +35,11 @@ func readCPUTime() (int64, error) {
 func readMaxRSS() (int64, error) {
 	return 0, errors.New("readMaxRSS is not supported on Windows")
 }
+
+func readCurrentRSS() (int64, error) {
+	return 0, errors.New("readCurrentRSS is not supported on Windows")
+}
+
+func readVMSize() (int64, error) {
+	return 0, errors.New("readVMSize is not supported on Windows")
+}

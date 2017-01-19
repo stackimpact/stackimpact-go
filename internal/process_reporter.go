@@ -75,6 +75,20 @@ func (pr *ProcessReporter) report() {
 		pr.agent.error(err)
 	}
 
+	currentRSS, err := readCurrentRSS()
+	if err == nil {
+		pr.reportMetric(TypeState, CategoryMemory, NameCurrentRSS, UnitKilobyte, float64(currentRSS))
+	} else {
+		pr.agent.error(err)
+	}
+
+	vmSize, err := readVMSize()
+	if err == nil {
+		pr.reportMetric(TypeState, CategoryMemory, NameVMSize, UnitKilobyte, float64(vmSize))
+	} else {
+		pr.agent.error(err)
+	}
+
 	memStats := &runtime.MemStats{}
 	runtime.ReadMemStats(memStats)
 	pr.reportMetric(TypeState, CategoryMemory, NameAllocated, UnitByte, float64(memStats.Alloc))

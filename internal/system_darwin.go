@@ -1,8 +1,9 @@
-// +build linux darwin
+// +build darwin
 
 package internal
 
 import (
+	"errors"
 	"runtime"
 	"syscall"
 )
@@ -37,4 +38,12 @@ func readMaxRSS() (int64, error) {
 	}
 
 	return maxRSS, nil
+}
+
+func readCurrentRSS() (int64, error) {
+	return 0, errors.New("readCurrentRSS is not supported on OS X")
+}
+
+func readVMSize() (int64, error) {
+	return 0, errors.New("readVMSize is not supported on OS X")
 }
