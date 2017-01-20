@@ -21,14 +21,10 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 	runtime.GC()
 	runtime.GC()
 
-	records, err := agent.allocationReporter.readMemoryProfile()
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	p := agent.allocationReporter.readHeapProfile()
 
 	// size
-	callGraph, err := agent.allocationReporter.createAllocationCallGraph(records)
+	callGraph, err := agent.allocationReporter.createAllocationCallGraph(p)
 	if err != nil {
 		t.Error(err)
 		return

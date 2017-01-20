@@ -4,6 +4,7 @@
 *.exe
 *.test
 *.prof
+*.test
 
 *.DS_Store
 .DS_Store

@@ -48,7 +48,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	done := make(chan bool)
 
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		wait := make(chan bool)
 

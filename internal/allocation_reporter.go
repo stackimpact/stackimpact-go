@@ -1,10 +1,15 @@
 package internal
 
 import (
+	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
-	"sort"
+	"runtime/pprof"
+
+	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
 )
 
 type recordSorter []runtime.MemProfileRecord
@@ -61,108 +66,98 @@ func (ar *AllocationReporter) report(trigger string) {
 		return
 	}
 
-	records, err := ar.readMemoryProfile()
-	if err != nil {
-		ar.agent.error(err)
-		return
-	}
+	ar.agent.log("Reading heap profile...")
+	p := ar.readHeapProfile()
+	ar.agent.log("Done.")
 
 	// allocated size
-	if callGraph, err := ar.createAllocationCallGraph(records); err != nil {
+	if callGraph, err := ar.createAllocationCallGraph(p); err != nil {
 		ar.agent.error(err)
 	} else {
 		// filter calls with lower than 10KB
 		callGraph.filter(2, 10000, math.Inf(0))
 
-		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameAllocatedSize, UnitByte)
+		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameHeapAllocation, UnitByte)
 		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
 		ar.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }
 
-func (ar *AllocationReporter) readMemoryProfile() ([]runtime.MemProfileRecord, error) {
-	var records []runtime.MemProfileRecord
-	n, ok := runtime.MemProfile(nil, false)
-	for {
-		records = make([]runtime.MemProfileRecord, n+50)
-		n, ok = runtime.MemProfile(records, false)
-		if ok {
-			records = records[0:n]
+func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*BreakdownNode, error) {
+	// find "inuse_space" type index
+	typeIndex := -1
+	for i, s := range p.SampleType {
+		if s.Type == "inuse_space" {
+			typeIndex = i
+
 			break
 		}
 	}
 
-	return records, nil
-}
-
-func (ar *AllocationReporter) createAllocationCallGraph(records []runtime.MemProfileRecord) (*BreakdownNode, error) {
-	if len(records) > 100 {
-		sort.Sort(recordSorter(records))
-		records = records[0:100]
+	if typeIndex == -1 {
+		return nil, errors.New("Unrecognized profile data")
 	}
 
+	// build call graph
 	rootNode := newBreakdownNode("root")
 
-	for i := range records {
-		record := &records[i]
-
-		var measurement float64
-		measurement = float64(record.InUseBytes())
-
-		if err := addStackToCallGraph(rootNode, record.Stack(), measurement); err != nil {
-			return nil, err
+	for _, s := range p.Sample {
+		if len(s.Value) <= typeIndex {
+			ar.agent.log("Possible inconsistence in profile types and measurements")
+			continue
 		}
-	}
 
-	return rootNode, nil
-}
+		value := s.Value[typeIndex]
+		if value == 0 {
+			continue
+		}
+		rootNode.measurement += float64(value)
 
-func addStackToCallGraph(rootNode *BreakdownNode, stk []uintptr, measurement float64) error {
-	frames := make([]*BreakdownNode, 0)
-
-	// create stack frames
-	wasPanic := false
-	for i, pc := range stk {
-		f := runtime.FuncForPC(pc)
-		if f == nil {
-			wasPanic = false
-		} else {
-			tracepc := pc
-
-			// Back up to call instruction.
-			if i > 0 && pc > f.Entry() && !wasPanic {
-				if runtime.GOARCH == "386" || runtime.GOARCH == "amd64" {
-					tracepc--
-				} else {
-					tracepc -= 4 // arm, etc
-				}
-			}
-
-			funcName := f.Name()
-			fileName, fileLine := f.FileLine(tracepc)
+		currentNode := rootNode
+		for i := len(s.Location) - 1; i >= 0; i-- {
+			l := s.Location[i]
+			funcName, fileName, fileLine := readFuncInfo(l)
 
 			if funcName == "runtime.goexit" {
 				continue
 			}
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
-			frame := newBreakdownNode(frameName)
-			frames = append(frames, frame)
-
-			wasPanic = funcName == "runtime.gopanic"
+			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.measurement += float64(value)
 		}
 	}
 
-	// add frames to root
-	rootNode.measurement += measurement
+	return rootNode, nil
+}
 
-	currentNode := rootNode
-	for i := len(frames) - 1; i >= 0; i-- {
-		f := frames[i]
+func (ar *AllocationReporter) readHeapProfile() *profile.Profile {
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
 
-		currentNode = currentNode.findOrAddChild(f.name)
-		currentNode.measurement += measurement
+	runtime.GC()
+	pprof.WriteHeapProfile(w)
+
+	w.Flush()
+	r := bufio.NewReader(&buf)
+
+	if p, perr := profile.Parse(r); perr == nil {
+		if serr := symbolizeProfile(p); serr != nil {
+			ar.agent.log("Cannot symbolize heap profile:")
+			ar.agent.error(serr)
+			return nil
+		}
+
+		if verr := p.CheckValid(); verr != nil {
+			ar.agent.log("Parsed invalid heap profile:")
+			ar.agent.error(verr)
+			return nil
+		}
+
+		return p
+	} else {
+		ar.agent.log("Error parsing heap profile:")
+		ar.agent.error(perr)
+		return nil
 	}
-
-	return nil
 }
