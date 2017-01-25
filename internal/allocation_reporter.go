@@ -68,6 +68,9 @@ func (ar *AllocationReporter) report(trigger string) {
 
 	ar.agent.log("Reading heap profile...")
 	p := ar.readHeapProfile()
+	if p == nil {
+		return
+	}
 	ar.agent.log("Done.")
 
 	// allocated size

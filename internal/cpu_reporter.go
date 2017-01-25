@@ -51,6 +51,9 @@ func (cr *CPUReporter) report(trigger string) {
 
 	cr.agent.log("Starting CPU profiler for 5000 milliseconds...")
 	p := cr.readCPUProfile(5000)
+	if p == nil {
+		return
+	}
 	cr.agent.log("CPU profiler stopped.")
 
 	if callGraph, err := cr.createCPUCallGraph(p); err != nil {

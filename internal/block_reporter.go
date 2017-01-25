@@ -34,7 +34,7 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 		reportingStrategy: nil,
 	}
 
-	br.reportingStrategy = newReportingStrategy(agent, 60, 300,
+	br.reportingStrategy = newReportingStrategy(agent, 75, 300,
 		func() float64 {
 			return float64(runtime.NumGoroutine())
 		},
