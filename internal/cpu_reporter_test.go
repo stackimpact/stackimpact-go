@@ -26,7 +26,7 @@ func TestCreateCallGraph(t *testing.T) {
 		done <- true
 	}()
 
-	p := agent.cpuReporter.readCPUProfile(1000)
+	p, _ := agent.cpuReporter.readCPUProfile(1000)
 	//fmt.Printf("PROFILE: %v\n", p.String())
 	callGraph, err := agent.cpuReporter.createCPUCallGraph(p)
 	if err != nil {

@@ -12,14 +12,16 @@ import (
 	pprofTrace "github.com/stackimpact/stackimpact-go/internal/pprof/trace"
 )
 
+var verbose bool = false
+
 func TestAdjustTraceDurtaion(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	duration := agent.blockReporter.adjustTraceDuration()
+	duration, _ := agent.blockReporter.adjustTraceDuration(10)
 
-	if duration < 3000 {
-		t.Errorf("Duration should be >= 3000, but is %v", duration)
+	if duration < 1000 {
+		t.Errorf("Duration should be < 1000, but is %v", duration)
 	}
 
 	done := make(chan bool)
@@ -32,12 +34,12 @@ func TestAdjustTraceDurtaion(t *testing.T) {
 		}
 	}()
 
-	duration = agent.blockReporter.adjustTraceDuration()
+	duration, _ = agent.blockReporter.adjustTraceDuration(10)
 
 	done <- true
 
-	if duration != 100 {
-		t.Errorf("Duration should be 100, but is %v", duration)
+	if duration > 100 {
+		t.Errorf("Duration should be > 100, but is %v", duration)
 	}
 }
 
@@ -48,7 +50,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	done := make(chan bool)
 
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		wait := make(chan bool)
 
@@ -63,7 +65,7 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		done <- true
 	}()
 
-	events := agent.blockReporter.readTraceEvents(200)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -77,16 +79,18 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockRecv)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	callGraph.propagate()
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithChannel") {
@@ -119,7 +123,7 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 	waitForServer("http://localhost:5001/ready1")
 
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		res, err := http.Get("http://localhost:5001/test1")
 		if err != nil {
 			t.Error(err)
@@ -128,7 +132,7 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 		}
 	}()
 
-	events := agent.blockReporter.readTraceEvents(150)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -142,16 +146,18 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockNet)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 150)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	callGraph.propagate()
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "net.(*netFD).Read") {
@@ -180,7 +186,7 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 		lock.Unlock()
 	}()
 
-	events := agent.blockReporter.readTraceEvents(200)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -194,16 +200,18 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoBlockSync)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	callGraph.propagate()
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithLock") {
@@ -223,7 +231,7 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 		}
 	}()
 
-	events := agent.blockReporter.readTraceEvents(200)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	/*fmt.Printf("EVENTS:\n")
 	  for _, ev := range events {
@@ -237,16 +245,18 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 		return (event.Type == pprofTrace.EvGoSysCall)
 	}
 	selectedEvents := selectEvents(events, selectorFunc)
-	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 200)
+	callGraph, err := agent.blockReporter.createBlockCallGraph(selectedEvents, nil, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	callGraph.propagate()
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithSyscall") {
@@ -287,7 +297,7 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	waitForServer("http://localhost:5002/ready2")
 
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		res, err := http.Get("http://localhost:5002/test2")
 		if err != nil {
@@ -297,7 +307,7 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 		}
 	}()
 
-	events := agent.blockReporter.readTraceEvents(300)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	/*for _, ev := range events {
 		fmt.Printf("\n\n\n\nEVENTS:\n")
@@ -313,20 +323,6 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	}*/
 
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		l := len(event.Stk)
 		return (l >= 2 &&
 			event.Stk[l-1].Fn == "net/http.(*conn).serve" &&
@@ -340,12 +336,12 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	}
 	callGraph.evaluateP95()
 	callGraph.propagate()
-
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1") {
@@ -378,7 +374,7 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 	waitForServer("http://localhost:5003/ready3")
 
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		// request
 		res, err := http.Get("http://localhost:5003/test3")
@@ -389,23 +385,9 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 		}
 	}()
 
-	events := agent.blockReporter.readTraceEvents(200)
+	events, _ := agent.blockReporter.readTraceEvents(500)
 
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		for _, f := range event.Stk {
 			if f.Fn == "net/http.(*Client).send" {
 				return true
@@ -422,12 +404,12 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 	}
 	callGraph.evaluateP95()
 	callGraph.propagate()
-
-	//fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
-
+	if verbose {
+		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 50 {
-		t.Error("Wait time is too low")
+		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPClient.func2") {
@@ -438,7 +420,7 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 func waitForServer(url string) {
 	for {
 		if _, err := http.Get(url); err == nil {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			break
 		}
 	}

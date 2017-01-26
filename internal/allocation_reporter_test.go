@@ -21,7 +21,7 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 	runtime.GC()
 	runtime.GC()
 
-	p := agent.allocationReporter.readHeapProfile()
+	p, _ := agent.allocationReporter.readHeapProfile()
 
 	// size
 	callGraph, err := agent.allocationReporter.createAllocationCallGraph(p)

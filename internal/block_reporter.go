@@ -56,9 +56,23 @@ func (br *BlockReporter) report(trigger string) {
 		return
 	}
 
-	duration := br.adjustTraceDuration()
+	duration, aerr := br.adjustTraceDuration(10)
+	if aerr != nil {
+		br.agent.error(aerr)
+		return
+	}
+
+	if duration < 1 {
+		return
+	}
+
 	br.agent.log("Starting trace profiler for %v milliseconds...", duration)
-	events := br.readTraceEvents(duration)
+	events, rerr := br.readTraceEvents(duration)
+	if rerr != nil {
+		br.agent.error(rerr)
+		return
+	}
+
 	br.agent.log("Trace profiler stopped.")
 
 	br.reportChannelProfile(trigger, events, duration)
@@ -147,21 +161,6 @@ func (br *BlockReporter) reportLockProfile(trigger string, events []*pprofTrace.
 func (br *BlockReporter) reportHTTPHandlerTrace(trigger string, events []*pprofTrace.Event) {
 	selectorFunc := func(event *pprofTrace.Event) bool {
 		l := len(event.Stk)
-
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		return (l >= 2 &&
 			event.Stk[l-1].Fn == "net/http.(*conn).serve" &&
 			event.Stk[l-2].Fn == "net/http.serverHandler.ServeHTTP")
@@ -186,20 +185,6 @@ func (br *BlockReporter) reportHTTPHandlerTrace(trigger string, events []*pprofT
 
 func (br *BlockReporter) reportHTTPClientTrace(trigger string, events []*pprofTrace.Event) {
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		for _, f := range event.Stk {
 			if f.Fn == "net/http.(*Client).send" {
 				return true
@@ -229,20 +214,6 @@ func (br *BlockReporter) reportHTTPClientTrace(trigger string, events []*pprofTr
 func (br *BlockReporter) reportSQLStatementTrace(trigger string, events []*pprofTrace.Event) {
 	selectorRe := regexp.MustCompile(`^database\/sql\.\(\*(DB|Stmt|Tx|Rows)\)\.[A-Z]`)
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		for _, f := range event.Stk {
 			if selectorRe.MatchString(f.Fn) {
 				return true
@@ -272,20 +243,6 @@ func (br *BlockReporter) reportSQLStatementTrace(trigger string, events []*pprof
 func (br *BlockReporter) reportMongoDBCallTrace(trigger string, events []*pprofTrace.Event) {
 	selectorRe := regexp.MustCompile(`^gopkg\.in\/mgo%2ev2\.\(\*\w+\)\.[A-Z]`)
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		for _, f := range event.Stk {
 			if selectorRe.MatchString(f.Fn) {
 				return true
@@ -316,20 +273,6 @@ func (br *BlockReporter) reportRedisCallTrace(trigger string, events []*pprofTra
 	redigoSelectorRe := regexp.MustCompile(`^github\.com\/garyburd\/redigo\/redis\.\(\*conn\)\.[A-Z]`)
 	goredisSelectorRe := regexp.MustCompile(`^gopkg\.in\/redis%2ev5\.\(\*\w+\)\.[A-Z]`)
 	selectorFunc := func(event *pprofTrace.Event) bool {
-		switch event.Type {
-		case
-			pprofTrace.EvGoBlockNet,
-			pprofTrace.EvGoSysCall,
-			pprofTrace.EvGoBlockSend,
-			pprofTrace.EvGoBlockRecv,
-			pprofTrace.EvGoBlockSelect,
-			pprofTrace.EvGoBlockSync,
-			pprofTrace.EvGoBlockCond,
-			pprofTrace.EvGoSleep:
-		default:
-			return false
-		}
-
 		for _, f := range event.Stk {
 			if redigoSelectorRe.MatchString(f.Fn) || goredisSelectorRe.MatchString(f.Fn) {
 				return true
@@ -458,45 +401,16 @@ func (br *BlockReporter) createTraceCallGraph(
 	return rootNode, nil
 }
 
-func (br *BlockReporter) adjustTraceDuration() int64 {
+func (br *BlockReporter) adjustTraceDuration(duration int) (int64, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
-	trace.Start(w)
+	err := trace.Start(w)
+	if err != nil {
+		return 0, err
+	}
 
-	done := make(chan int64)
-
-	timer := time.NewTimer(10 * time.Millisecond)
-	go func() {
-		defer br.agent.recoverAndLog()
-
-		<-timer.C
-
-		trace.Stop()
-
-		w.Flush()
-		size := buf.Len()
-
-		// adjust tracing duration based on 10ms sample trace log size
-		duration := int64(5000 - size/5)
-		if duration <= 0 {
-			duration = 100
-		}
-
-		done <- duration
-	}()
-
-	return <-done
-}
-
-func (br *BlockReporter) readTraceEvents(duration int64) []*pprofTrace.Event {
-	var buf bytes.Buffer
-	w := bufio.NewWriter(&buf)
-
-	trace.Start(w)
-
-	done := make(chan []*pprofTrace.Event)
-
+	done := make(chan bool)
 	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
 	go func() {
 		defer br.agent.recoverAndLog()
@@ -505,29 +419,97 @@ func (br *BlockReporter) readTraceEvents(duration int64) []*pprofTrace.Event {
 
 		trace.Stop()
 
-		w.Flush()
-		r := bufio.NewReader(&buf)
-
-		events, err := pprofTrace.Parse(r, "")
-		if err != nil {
-			br.agent.log("Cannot parse trace profile:")
-			br.agent.error(err)
-			done <- nil
-			return
-		}
-
-		err = symbolizeEvents(events)
-		if err != nil {
-			br.agent.log("Error parsing trace profile:")
-			br.agent.error(err)
-			done <- nil
-			return
-		}
-
-		done <- events
+		done <- true
 	}()
+	<-done
 
-	return <-done
+	w.Flush()
+	r := bufio.NewReader(&buf)
+
+	events, err := pprofTrace.Parse(r, "")
+	if err != nil {
+		return 0, err
+	}
+
+	size := len(events)
+
+	// estimate duration, which will limit max allowed overhead after parsing trace log
+	// at max 20MB, which is about 10000 events (10k objects ~ 2mb)
+	d := int64((100000.0 / float64(size)) * float64(duration))
+	if d > 10000 {
+		d = 10000
+	}
+
+	return d, nil
+}
+
+func (br *BlockReporter) readTraceEvents(duration int64) ([]*pprofTrace.Event, error) {
+	var startMem float64
+	if br.agent.Debug {
+		runtime.GC()
+		startMem = readMemAlloc()
+	}
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+
+	err := trace.Start(w)
+	if err != nil {
+		return nil, err
+	}
+
+	done := make(chan bool)
+	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
+	go func() {
+		defer br.agent.recoverAndLog()
+
+		<-timer.C
+
+		trace.Stop()
+
+		done <- true
+	}()
+	<-done
+
+	w.Flush()
+	r := bufio.NewReader(&buf)
+
+	events, err := pprofTrace.Parse(r, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if br.agent.Debug {
+		br.agent.log("Memory overhead (bytes): %v", int64(readMemAlloc()-startMem))
+	}
+
+	selectorFunc := func(event *pprofTrace.Event) bool {
+		switch event.Type {
+		case
+			pprofTrace.EvGoBlockNet,
+			pprofTrace.EvGoSysCall,
+			pprofTrace.EvGoBlockSend,
+			pprofTrace.EvGoBlockRecv,
+			pprofTrace.EvGoBlockSelect,
+			pprofTrace.EvGoBlockSync,
+			pprofTrace.EvGoBlockCond,
+			pprofTrace.EvGoSleep:
+			return true
+		default:
+			return false
+		}
+	}
+	events = selectEvents(events, selectorFunc)
+
+	// GC filtered trace events
+	runtime.GC()
+
+	err = symbolizeEvents(events)
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
 }
 
 func symbolizeEvents(events []*pprofTrace.Event) error {

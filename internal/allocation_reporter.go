@@ -67,7 +67,11 @@ func (ar *AllocationReporter) report(trigger string) {
 	}
 
 	ar.agent.log("Reading heap profile...")
-	p := ar.readHeapProfile()
+	p, e := ar.readHeapProfile()
+	if e != nil {
+		ar.agent.error(e)
+		return
+	}
 	if p == nil {
 		return
 	}
@@ -134,33 +138,30 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 	return rootNode, nil
 }
 
-func (ar *AllocationReporter) readHeapProfile() *profile.Profile {
+func (ar *AllocationReporter) readHeapProfile() (*profile.Profile, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
 	runtime.GC()
-	pprof.WriteHeapProfile(w)
+	err := pprof.WriteHeapProfile(w)
+	if err != nil {
+		return nil, err
+	}
 
 	w.Flush()
 	r := bufio.NewReader(&buf)
 
 	if p, perr := profile.Parse(r); perr == nil {
 		if serr := symbolizeProfile(p); serr != nil {
-			ar.agent.log("Cannot symbolize heap profile:")
-			ar.agent.error(serr)
-			return nil
+			return nil, serr
 		}
 
 		if verr := p.CheckValid(); verr != nil {
-			ar.agent.log("Parsed invalid heap profile:")
-			ar.agent.error(verr)
-			return nil
+			return nil, verr
 		}
 
-		return p
+		return p, nil
 	} else {
-		ar.agent.log("Error parsing heap profile:")
-		ar.agent.error(perr)
-		return nil
+		return nil, perr
 	}
 }

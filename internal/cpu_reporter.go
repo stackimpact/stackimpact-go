@@ -50,7 +50,11 @@ func (cr *CPUReporter) report(trigger string) {
 	}
 
 	cr.agent.log("Starting CPU profiler for 5000 milliseconds...")
-	p := cr.readCPUProfile(5000)
+	p, e := cr.readCPUProfile(5000)
+	if e != nil {
+		cr.agent.error(e)
+		return
+	}
 	if p == nil {
 		return
 	}
@@ -122,15 +126,18 @@ func (cr *CPUReporter) createCPUCallGraph(p *profile.Profile) (*BreakdownNode, e
 	return rootNode, nil
 }
 
-func (cr *CPUReporter) readCPUProfile(duration int64) *profile.Profile {
+func (cr *CPUReporter) readCPUProfile(duration int64) (*profile.Profile, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
-	pprof.StartCPUProfile(w)
 	start := time.Now()
 
-	done := make(chan *profile.Profile)
+	err := pprof.StartCPUProfile(w)
+	if err != nil {
+		return nil, err
+	}
 
+	done := make(chan bool)
 	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
 	go func() {
 		defer cr.agent.recoverAndLog()
@@ -139,41 +146,33 @@ func (cr *CPUReporter) readCPUProfile(duration int64) *profile.Profile {
 
 		pprof.StopCPUProfile()
 
-		w.Flush()
-		r := bufio.NewReader(&buf)
-
-		if p, perr := profile.Parse(r); perr == nil {
-			if p.TimeNanos == 0 {
-				p.TimeNanos = start.UnixNano()
-			}
-			if p.DurationNanos == 0 {
-				p.DurationNanos = duration * 1e6
-			}
-
-			if serr := symbolizeProfile(p); serr != nil {
-				cr.agent.log("Cannot symbolize CPU profile:")
-				cr.agent.error(serr)
-				done <- nil
-				return
-			}
-
-			if verr := p.CheckValid(); verr != nil {
-				cr.agent.log("Parsed invalid CPU profile:")
-				cr.agent.error(verr)
-				done <- nil
-				return
-			}
-
-			done <- p
-		} else {
-			cr.agent.log("Error parsing CPU profile:")
-			cr.agent.error(perr)
-			done <- nil
-			return
-		}
+		done <- true
 	}()
+	<-done
 
-	return <-done
+	w.Flush()
+	r := bufio.NewReader(&buf)
+
+	if p, perr := profile.Parse(r); perr == nil {
+		if p.TimeNanos == 0 {
+			p.TimeNanos = start.UnixNano()
+		}
+		if p.DurationNanos == 0 {
+			p.DurationNanos = duration * 1e6
+		}
+
+		if serr := symbolizeProfile(p); serr != nil {
+			return nil, serr
+		}
+
+		if verr := p.CheckValid(); verr != nil {
+			return nil, verr
+		}
+
+		return p, nil
+	} else {
+		return nil, perr
+	}
 }
 
 func symbolizeProfile(p *profile.Profile) error {
