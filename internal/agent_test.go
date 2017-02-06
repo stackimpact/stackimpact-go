@@ -24,3 +24,13 @@ func TestStart(t *testing.T) {
 		t.Error("HostName not set")
 	}
 }
+
+func TestCalculateProgramSHA1(t *testing.T) {
+	agent := NewAgent()
+	agent.Debug = true
+	hash := agent.calculateProgramSHA1()
+
+	if hash == "" {
+		t.Error("failed calculating program SHA1")
+	}
+}

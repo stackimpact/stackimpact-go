@@ -23,11 +23,16 @@ func TestReport(t *testing.T) {
 	isValid(t, metrics, TypeCounter, CategoryMemory, NameLookups, 0, math.Inf(0))
 	isValid(t, metrics, TypeCounter, CategoryMemory, NameMallocs, 0, math.Inf(0))
 	isValid(t, metrics, TypeCounter, CategoryMemory, NameFrees, 0, math.Inf(0))
+	isValid(t, metrics, TypeCounter, CategoryMemory, NameHeapSys, 0, math.Inf(0))
+	isValid(t, metrics, TypeState, CategoryMemory, NameHeapIdle, 0, math.Inf(0))
+	isValid(t, metrics, TypeState, CategoryMemory, NameHeapInuse, 0, math.Inf(0))
+	isValid(t, metrics, TypeCounter, CategoryMemory, NameHeapReleased, 0, math.Inf(0))
 	isValid(t, metrics, TypeState, CategoryMemory, NameHeapObjects, 0, math.Inf(0))
 	isValid(t, metrics, TypeCounter, CategoryGC, NameGCTotalPause, 0, math.Inf(0))
 	isValid(t, metrics, TypeCounter, CategoryGC, NameNumGC, 0, math.Inf(0))
 	isValid(t, metrics, TypeState, CategoryGC, NameGCCPUFraction, 0, 1)
 	isValid(t, metrics, TypeState, CategoryRuntime, NameNumGoroutines, 0, math.Inf(0))
+	isValid(t, metrics, TypeCounter, CategoryRuntime, NameNumCgoCalls, 0, math.Inf(0))
 }
 
 func isValid(t *testing.T, metrics map[string]*Metric, typ string, category string, name string, minValue float64, maxValue float64) {

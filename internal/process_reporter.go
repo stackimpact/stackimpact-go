@@ -95,6 +95,10 @@ func (pr *ProcessReporter) report() {
 	pr.reportMetric(TypeCounter, CategoryMemory, NameLookups, UnitNone, float64(memStats.Lookups))
 	pr.reportMetric(TypeCounter, CategoryMemory, NameMallocs, UnitNone, float64(memStats.Mallocs))
 	pr.reportMetric(TypeCounter, CategoryMemory, NameFrees, UnitNone, float64(memStats.Frees))
+	pr.reportMetric(TypeCounter, CategoryMemory, NameHeapSys, UnitByte, float64(memStats.HeapSys))
+	pr.reportMetric(TypeState, CategoryMemory, NameHeapIdle, UnitByte, float64(memStats.HeapIdle))
+	pr.reportMetric(TypeState, CategoryMemory, NameHeapInuse, UnitByte, float64(memStats.HeapInuse))
+	pr.reportMetric(TypeCounter, CategoryMemory, NameHeapReleased, UnitByte, float64(memStats.HeapReleased))
 	pr.reportMetric(TypeState, CategoryMemory, NameHeapObjects, UnitNone, float64(memStats.HeapObjects))
 	pr.reportMetric(TypeCounter, CategoryGC, NameGCTotalPause, UnitNanosecond, float64(memStats.PauseTotalNs))
 	pr.reportMetric(TypeCounter, CategoryGC, NameNumGC, UnitNone, float64(memStats.NumGC))
@@ -102,4 +106,7 @@ func (pr *ProcessReporter) report() {
 
 	numGoroutine := runtime.NumGoroutine()
 	pr.reportMetric(TypeState, CategoryRuntime, NameNumGoroutines, UnitNone, float64(numGoroutine))
+
+	numCgoCall := runtime.NumCgoCall()
+	pr.reportMetric(TypeCounter, CategoryRuntime, NameNumCgoCalls, UnitNone, float64(numCgoCall))
 }

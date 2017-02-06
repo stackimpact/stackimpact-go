@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strconv"
@@ -12,13 +13,14 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.3.2"
+const AgentVersion = "1.3.3"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
 
 type Agent struct {
 	nextId             int64
+	buildId            string
 	runId              string
 	runTs              int64
 	apiRequest         *APIRequest
@@ -50,6 +52,7 @@ func NewAgent() *Agent {
 	a := &Agent{
 		nextId:             0,
 		runId:              "",
+		buildId:            "",
 		runTs:              time.Now().Unix(),
 		apiRequest:         nil,
 		config:             nil,
@@ -74,6 +77,7 @@ func NewAgent() *Agent {
 		Debug:            false,
 	}
 
+	a.buildId = a.calculateProgramSHA1()
 	a.runId = a.uuid()
 
 	a.apiRequest = newAPIRequest(a)
@@ -117,6 +121,23 @@ func (a *Agent) Start() {
 	a.log("Agent started.")
 
 	return
+}
+
+func (a *Agent) calculateProgramSHA1() string {
+	file, err := os.Open(os.Args[0])
+	if err != nil {
+		a.error(err)
+		return ""
+	}
+	defer file.Close()
+
+	hash := sha1.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		a.error(err)
+		return ""
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func (a *Agent) RecordSegment(path []string, duration int64) {

@@ -33,6 +33,7 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 		"app_version":     ar.agent.AppVersion,
 		"app_environment": ar.agent.AppEnvironment,
 		"host_name":       ar.agent.HostName,
+		"build_id":        ar.agent.buildId,
 		"run_id":          ar.agent.runId,
 		"run_ts":          ar.agent.runTs,
 		"sent_at":         time.Now().Unix(),
