@@ -34,6 +34,9 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 	if callGraph.measurement < 100000 {
 		t.Error("Allocated size is too low")
 	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateAllocationCallGraph") {
 		t.Error("The test function is not found in the profile")

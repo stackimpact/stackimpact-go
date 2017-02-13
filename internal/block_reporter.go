@@ -365,7 +365,7 @@ func (br *BlockReporter) createBlockCallGraph(
 		}
 
 		t := float64(rec.time) / float64(1e6) / seconds
-		currentNode.measurement += t
+		currentNode.increment(t, 1)
 	}
 
 	return rootNode, nil

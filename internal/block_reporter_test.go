@@ -92,6 +92,9 @@ func TestCreateBlockCallGraphWithChannel(t *testing.T) {
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithChannel") {
 		t.Error("The test function is not found in the profile")
@@ -156,6 +159,9 @@ func TestCreateBlockCallGraphWithNetwork(t *testing.T) {
 		fmt.Printf("WAIT TIME: %v\n", callGraph.measurement)
 		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
@@ -213,6 +219,9 @@ func TestCreateBlockCallGraphWithLock(t *testing.T) {
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithLock") {
 		t.Error("The test function is not found in the profile")
@@ -257,6 +266,9 @@ func TestCreateBlockCallGraphWithSyscall(t *testing.T) {
 	}
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
+	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithSyscall") {
@@ -343,6 +355,9 @@ func TestCreateBlockCallGraphWithHTTPHandler(t *testing.T) {
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
 	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPHandler.func1") {
 		t.Error("The test function is not found in the profile")
@@ -410,6 +425,9 @@ func TestCreateBlockCallGraphWithHTTPClient(t *testing.T) {
 	}
 	if callGraph.measurement < 50 {
 		t.Errorf("Wait time is too low: %v", callGraph.measurement)
+	}
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
 	}
 
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateBlockCallGraphWithHTTPClient.func2") {

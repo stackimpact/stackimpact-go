@@ -92,16 +92,24 @@ func (ar *AllocationReporter) report(trigger string) {
 
 func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*BreakdownNode, error) {
 	// find "inuse_space" type index
-	typeIndex := -1
+	inuseSpaceTypeIndex := -1
 	for i, s := range p.SampleType {
 		if s.Type == "inuse_space" {
-			typeIndex = i
-
+			inuseSpaceTypeIndex = i
 			break
 		}
 	}
 
-	if typeIndex == -1 {
+	// find "inuse_space" type index
+	inuseObjectsTypeIndex := -1
+	for i, s := range p.SampleType {
+		if s.Type == "inuse_objects" {
+			inuseObjectsTypeIndex = i
+			break
+		}
+	}
+
+	if inuseSpaceTypeIndex == -1 || inuseObjectsTypeIndex == -1 {
 		return nil, errors.New("Unrecognized profile data")
 	}
 
@@ -109,16 +117,19 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 	rootNode := newBreakdownNode("root")
 
 	for _, s := range p.Sample {
-		if len(s.Value) <= typeIndex {
+		l := len(s.Value)
+		if inuseSpaceTypeIndex >= l || inuseObjectsTypeIndex >= l {
 			ar.agent.log("Possible inconsistence in profile types and measurements")
 			continue
 		}
 
-		value := s.Value[typeIndex]
-		if value == 0 {
+		value := s.Value[inuseSpaceTypeIndex]
+		count := s.Value[inuseObjectsTypeIndex]
+		if value == 0 || value == 0 {
 			continue
 		}
 		rootNode.measurement += float64(value)
+		rootNode.increment(float64(value), int64(count))
 
 		currentNode := rootNode
 		for i := len(s.Location) - 1; i >= 0; i-- {
@@ -131,7 +142,7 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
-			currentNode.measurement += float64(value)
+			currentNode.increment(float64(value), int64(count))
 		}
 	}
 

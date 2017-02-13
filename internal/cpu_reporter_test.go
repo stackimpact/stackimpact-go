@@ -38,7 +38,9 @@ func TestCreateCallGraph(t *testing.T) {
 	if callGraph.measurement < 2 {
 		t.Errorf("CPU usage is too low: %v", callGraph.measurement)
 	}
-
+	if callGraph.numSamples < 1 {
+		t.Error("Number of samples should be > 0")
+	}
 	if !strings.Contains(fmt.Sprintf("%v", callGraph.toMap()), "TestCreateCallGraph") {
 		t.Error("The test function is not found in the profile")
 	}

@@ -76,6 +76,7 @@ const ReservoirSize int = 1000
 type BreakdownNode struct {
 	name        string
 	measurement float64
+	numSamples  int64
 	reservoir   []float64
 	children    map[string]*BreakdownNode
 }
@@ -84,6 +85,7 @@ func newBreakdownNode(name string) *BreakdownNode {
 	bn := &BreakdownNode{
 		name:        name,
 		measurement: 0,
+		numSamples:  0,
 		reservoir:   nil,
 		children:    make(map[string]*BreakdownNode),
 	}
@@ -167,7 +169,13 @@ func (bn *BreakdownNode) propagate() {
 	for _, child := range bn.children {
 		child.propagate()
 		bn.measurement += child.measurement
+		bn.numSamples += child.numSamples
 	}
+}
+
+func (bn *BreakdownNode) increment(value float64, count int64) {
+	bn.measurement += value
+	bn.numSamples += count
 }
 
 func (bn *BreakdownNode) updateP95(value float64) {
@@ -180,6 +188,8 @@ func (bn *BreakdownNode) updateP95(value float64) {
 	} else {
 		bn.reservoir[rand.Intn(ReservoirSize)] = value
 	}
+
+	bn.numSamples += 1
 }
 
 func (bn *BreakdownNode) evaluateP95() {
@@ -205,6 +215,7 @@ func (bn *BreakdownNode) toMap() map[string]interface{} {
 	nodeMap := map[string]interface{}{
 		"name":        bn.name,
 		"measurement": bn.measurement,
+		"num_samples": bn.numSamples,
 		"children":    childrenMap,
 	}
 

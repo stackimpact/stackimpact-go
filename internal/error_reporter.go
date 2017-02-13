@@ -75,14 +75,14 @@ func (er *ErrorReporter) recordErrorSync(group string, err error, frames []strin
 		errorGraph = newBreakdownNode(group)
 		er.errorGraphs[group] = errorGraph
 	}
-	errorGraph.measurement += 1
+	errorGraph.increment(1, 0)
 
 	currentNode := errorGraph.findOrAddChild(err.Error())
-	currentNode.measurement += 1
+	currentNode.increment(1, 0)
 	for i := len(frames) - 1; i >= 0; i-- {
 		f := frames[i]
 		currentNode = currentNode.findOrAddChild(f)
-		currentNode.measurement += 1
+		currentNode.increment(1, 0)
 	}
 
 	er.recordLock.Unlock()
