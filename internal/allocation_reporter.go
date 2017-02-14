@@ -128,7 +128,6 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 		if value == 0 || value == 0 {
 			continue
 		}
-		rootNode.measurement += float64(value)
 		rootNode.increment(float64(value), int64(count))
 
 		currentNode := rootNode
