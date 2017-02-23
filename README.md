@@ -93,7 +93,7 @@ func main() {
         AppEnvironment: "production",
     })
 
-    http.HandleFunc("/", handler)
+    http.HandleFunc(agent.MeasureHTTP("/", handler)) // MeasureHTTP wrapper is optional
     http.ListenAndServe(":8080", nil)
 }
 ```
@@ -104,12 +104,19 @@ func main() {
 To measure performance and detect bottlenecks in arbitrary parts of application, the segment API can be used.
 
 ```go
+// Starts measurement of execution time of a code segment.
+// To stop measurement call Stop on returned Segment object.
+// After calling Stop the segment is recorded, aggregated and
+// reported with regular intervals.
 segment := agent.MeasureSegment("Segment1")
 defer segment.Stop()
 ```
 
 ```go
-subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
+// A helper function to measure HTTP handlers by wrapping HandeFunc parameters.
+// Usage example:
+//   http.HandleFunc(agent.MeasureHandlerSegment("/some-path", someHandlerFunc))
+subsegment := agent.MeasureHandlerSegment(pattern, handlerFunc)
 defer subsegment.Stop()
 ```
 
@@ -121,18 +128,22 @@ To monitor exceptions and panics with stack traces, the error recording API can 
 Recording handled errors:
 
 ```go
+// Aggregates and reports errors with regular intervals.
 agent.RecordError(someError)
 ```
 
 Recording panics without recovering:
 
 ```go
+// Aggregates and reports panics with regular intervals.
 defer agent.RecordPanic()
 ```
 
 Recording and recovering from panics:
 
 ```go
+// Aggregates and reports panics with regular intervals. This function also
+// recovers from panics
 defer agent.RecordAndRecoverPanic()
 ```
 

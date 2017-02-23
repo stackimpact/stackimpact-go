@@ -22,6 +22,8 @@ import (
 	goredis "gopkg.in/redis.v5"
 )
 
+var agent *stackimpact.Agent
+
 func useCPU(duration int, usage int) {
 	for j := 0; j < duration; j++ {
 		go func() {
@@ -181,7 +183,7 @@ func simulateLockWait() {
 	}
 }
 
-func simulateSegments(agent *stackimpact.Agent) {
+func simulateSegments() {
 	for {
 		done1 := make(chan bool)
 
@@ -189,29 +191,7 @@ func simulateSegments(agent *stackimpact.Agent) {
 			segment := agent.MeasureSegment("Segment1")
 			defer segment.Stop()
 
-			done2 := make(chan bool)
-
-			go func() {
-				subsegment := agent.MeasureSubsegment("Segment1", "Subsegment1")
-				defer subsegment.Stop()
-
-				time.Sleep(time.Duration(50+rand.Intn(20)) * time.Millisecond)
-
-				done2 <- true
-			}()
-
-			<-done2
-
-			go func() {
-				subsegment := agent.MeasureSubsegment("Segment1", "Subsegment2")
-				defer subsegment.Stop()
-
-				time.Sleep(time.Duration(20+rand.Intn(10)) * time.Millisecond)
-
-				done2 <- true
-			}()
-
-			<-done2
+			time.Sleep(time.Duration(100+rand.Intn(20)) * time.Millisecond)
 
 			done1 <- true
 		}()
@@ -220,7 +200,34 @@ func simulateSegments(agent *stackimpact.Agent) {
 	}
 }
 
-func simulateErrors(agent *stackimpact.Agent) {
+func simulateHandlerSegments() {
+	// start HTTP server
+	go func() {
+		http.HandleFunc(agent.MeasureHandlerSegment("/some-handler", func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(time.Duration(200+rand.Intn(50)) * time.Millisecond)
+
+			fmt.Fprintf(w, "OK")
+		}))
+
+		if err := http.ListenAndServe(":5001", nil); err != nil {
+			log.Fatal(err)
+			return
+		}
+	}()
+
+	requestTicker := time.NewTicker(100 * time.Millisecond)
+	for {
+		select {
+		case <-requestTicker.C:
+			res, err := http.Get("http://localhost:5001/some-handler")
+			if err == nil {
+				res.Body.Close()
+			}
+		}
+	}
+}
+
+func simulateErrors() {
 	go func() {
 		for {
 			agent.RecordError(errors.New("A handled exception"))
@@ -390,7 +397,7 @@ func simulateGoredis() {
 
 func main() {
 	// StackImpact initialization
-	agent := stackimpact.NewAgent()
+	agent = stackimpact.NewAgent()
 	agent.Start(stackimpact.Options{
 		AgentKey:         os.Getenv("AGENT_KEY"),
 		AppName:          "ExampleGoApp",
@@ -406,8 +413,9 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
-	go simulateSegments(agent)
-	go simulateErrors(agent)
+	go simulateSegments()
+	go simulateHandlerSegments()
+	go simulateErrors()
 	go simulateSQL()
 	go simulateMongo()
 	go simulateRedigo()

@@ -1,35 +1,23 @@
 package stackimpact
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 )
 
-func TestRecordSegment(t *testing.T) {
+func TestMeasureSegment(t *testing.T) {
 	agent := NewAgent()
 
 	done1 := make(chan bool)
 
 	var seg1 *Segment
-	var sub1 *Segment
 	go func() {
 		seg1 = agent.MeasureSegment("seg1")
 		defer seg1.Stop()
 
-		time.Sleep(30 * time.Millisecond)
-
-		done2 := make(chan bool)
-
-		go func() {
-			sub1 = agent.MeasureSubsegment("seg1", "sub1")
-			defer sub1.Stop()
-
-			time.Sleep(70 * time.Millisecond)
-
-			done2 <- true
-		}()
-
-		<-done2
+		time.Sleep(50 * time.Millisecond)
 
 		done1 <- true
 	}()
@@ -41,9 +29,35 @@ func TestRecordSegment(t *testing.T) {
 	if seg1.Duration < 50 {
 		t.Errorf("Duration of seg1 is too low: %v", seg1.Duration)
 	}
+}
 
-	if sub1.Duration < 35 {
-		t.Errorf("Duration of sub1 is too low: %v", sub1.Duration)
+func TestMeasureHandlerSegment(t *testing.T) {
+	agent := NewAgent()
+
+	// start HTTP server
+	go func() {
+		http.HandleFunc(agent.MeasureHandlerSegment("/test", func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Fprintf(w, "OK")
+		}))
+
+		if err := http.ListenAndServe(":5010", nil); err != nil {
+			t.Error(err)
+			return
+		}
+	}()
+
+	waitForServer("http://localhost:5010/test")
+
+	res, err := http.Get("http://localhost:5010/test")
+	if err != nil {
+		t.Error(err)
+		return
+	} else if res.StatusCode != 200 {
+		t.Error(err)
+		return
+	} else {
+		defer res.Body.Close()
 	}
 }
 
@@ -67,4 +81,13 @@ func TestRecoverPanic(t *testing.T) {
 	}()
 
 	<-done
+}
+
+func waitForServer(url string) {
+	for {
+		if _, err := http.Get(url); err == nil {
+			time.Sleep(100 * time.Millisecond)
+			break
+		}
+	}
 }

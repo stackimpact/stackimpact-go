@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.3.7"
+const AgentVersion = "1.3.8"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -140,12 +140,12 @@ func (a *Agent) calculateProgramSHA1() string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func (a *Agent) RecordSegment(path []string, duration int64) {
+func (a *Agent) RecordSegment(name string, duration int64) {
 	if !agentStarted {
 		return
 	}
 
-	a.segmentReporter.recordSegment(path, duration)
+	a.segmentReporter.recordSegment(name, duration)
 }
 
 func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {

@@ -8,12 +8,7 @@ type SegmentReporter struct {
 	agent             *Agent
 	reportingStrategy *ReportingStrategy
 	recordLock        *sync.Mutex
-	segmentGraphs     map[string]*BreakdownNode
-}
-
-type Segment struct {
-	path     []string
-	duration int64
+	segmentCounters   map[string]*BreakdownNode
 }
 
 func newSegmentReporter(agent *Agent) *SegmentReporter {
@@ -21,7 +16,7 @@ func newSegmentReporter(agent *Agent) *SegmentReporter {
 		agent:             agent,
 		reportingStrategy: nil,
 		recordLock:        &sync.Mutex{},
-		segmentGraphs:     make(map[string]*BreakdownNode),
+		segmentCounters:   make(map[string]*BreakdownNode),
 	}
 
 	sr.reportingStrategy = newReportingStrategy(agent, 60, 60, nil,
@@ -38,34 +33,25 @@ func (sr *SegmentReporter) start() {
 	sr.reportingStrategy.start()
 }
 
-func (sr *SegmentReporter) recordSegment(path []string, duration int64) {
-	go sr.recordSegmentSync(path, duration)
+func (sr *SegmentReporter) recordSegment(name string, duration int64) {
+	go sr.recordSegmentSync(name, duration)
 }
 
-func (sr *SegmentReporter) recordSegmentSync(path []string, duration int64) {
-	if len(path) == 0 || len(path) > 5 {
-		sr.agent.log("Invalid segment path, length=%v", len(path))
+func (sr *SegmentReporter) recordSegmentSync(name string, duration int64) {
+	if name == "" {
+		sr.agent.log("Empty segment name")
 		return
 	}
 
 	sr.recordLock.Lock()
 
-	var currentNode *BreakdownNode = nil
-	for _, name := range path {
-		if currentNode == nil {
-			segmentGraph, exists := sr.segmentGraphs[path[0]]
-			if !exists {
-				segmentGraph = newBreakdownNode(path[0])
-				sr.segmentGraphs[path[0]] = segmentGraph
-			}
-
-			currentNode = segmentGraph
-		} else {
-			currentNode = currentNode.findOrAddChild(name)
-		}
+	segmentCounter, exists := sr.segmentCounters[name]
+	if !exists {
+		segmentCounter = newBreakdownNode(name)
+		sr.segmentCounters[name] = segmentCounter
 	}
 
-	currentNode.updateP95(float64(duration))
+	segmentCounter.updateP95(float64(duration))
 
 	sr.recordLock.Unlock()
 }
@@ -73,15 +59,15 @@ func (sr *SegmentReporter) recordSegmentSync(path []string, duration int64) {
 func (sr *SegmentReporter) report(trigger string) {
 	sr.recordLock.Lock()
 
-	for _, segmentGraph := range sr.segmentGraphs {
-		segmentGraph.evaluateP95()
+	for _, segmentCounter := range sr.segmentCounters {
+		segmentCounter.evaluateP95()
 
-		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentGraph.name, UnitMillisecond)
-		metric.createMeasurement(trigger, segmentGraph.measurement, segmentGraph)
+		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentCounter.name, UnitMillisecond)
+		metric.createMeasurement(trigger, segmentCounter.measurement, segmentCounter)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
-	sr.segmentGraphs = make(map[string]*BreakdownNode)
+	sr.segmentCounters = make(map[string]*BreakdownNode)
 
 	sr.recordLock.Unlock()
 }

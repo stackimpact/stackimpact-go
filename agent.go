@@ -1,6 +1,9 @@
 package stackimpact
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/stackimpact/stackimpact-go/internal"
 )
 
@@ -29,6 +32,7 @@ type Agent struct {
 	Debug            bool
 }
 
+// Creates new agent instance.
 func NewAgent() *Agent {
 	a := &Agent{
 		internalAgent: internal.NewAgent(),
@@ -37,6 +41,9 @@ func NewAgent() *Agent {
 	return a
 }
 
+// Starts the agent with configuration options.
+// Agent should be started only once.
+// Required options are AgentKey and AppName.
 func (a *Agent) Start(options Options) {
 	a.internalAgent.AgentKey = options.AgentKey
 	a.internalAgent.AppName = options.AppName
@@ -64,7 +71,7 @@ func (a *Agent) Start(options Options) {
 	a.internalAgent.Start()
 }
 
-// compatibility < 1.2.0
+// DEPRECATED. Kept for compatibility with <1.2.0.
 func (a *Agent) Configure(agentKey string, appName string) {
 	a.Start(Options{
 		AgentKey:         agentKey,
@@ -75,24 +82,34 @@ func (a *Agent) Configure(agentKey string, appName string) {
 	})
 }
 
+// Starts measurement of execution time of a code segment.
+// To stop measurement call Stop on returned Segment object.
+// After calling Stop the segment is recorded, aggregated and
+// reported with regular intervals.
 func (a *Agent) MeasureSegment(segmentName string) *Segment {
-	s := newSegment(a, []string{segmentName})
+	s := newSegment(a, segmentName)
 	s.start()
 
 	return s
 }
 
-func (a *Agent) MeasureSubsegment(segmentName string, subsegmentName string) *Segment {
-	s := newSegment(a, []string{segmentName, subsegmentName})
-	s.start()
+// A helper function to measure HTTP handler code execution
+// by wrapping HandeFunc parameters.
+func (a *Agent) MeasureHandlerSegment(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
+	return pattern, func(w http.ResponseWriter, r *http.Request) {
+		segment := a.MeasureSegment(fmt.Sprintf("Handler %s", pattern))
+		defer segment.Stop()
 
-	return s
+		handlerFunc(w, r)
+	}
 }
 
+// Aggregates and reports errors with regular intervals.
 func (a *Agent) RecordError(err interface{}) {
 	a.internalAgent.RecordError(ErrorGroupHandledExceptions, err, 1)
 }
 
+// Aggregates and reports panics with regular intervals.
 func (a *Agent) RecordPanic() {
 	if err := recover(); err != nil {
 		a.internalAgent.RecordError(ErrorGroupUnrecoveredPanics, err, 1)
@@ -101,6 +118,8 @@ func (a *Agent) RecordPanic() {
 	}
 }
 
+// Aggregates and reports panics with regular intervals. This function also
+// recovers from panics
 func (a *Agent) RecordAndRecoverPanic() {
 	if err := recover(); err != nil {
 		a.internalAgent.RecordError(ErrorGroupRecoveredPanics, err, 1)
