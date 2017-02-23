@@ -93,7 +93,7 @@ func main() {
         AppEnvironment: "production",
     })
 
-    http.HandleFunc(agent.MeasureHTTP("/", handler)) // MeasureHTTP wrapper is optional
+    http.HandleFunc(agent.MeasureHandlerSegment("/", handler)) // MeasureHandlerSegment wrapper is optional
     http.ListenAndServe(":8080", nil)
 }
 ```
@@ -101,7 +101,7 @@ func main() {
 
 #### Measuring code segments (optional)
 
-To measure performance and detect bottlenecks in arbitrary parts of application, the segment API can be used.
+To measure execution time of arbitrary parts of application, the segment API can be used.
 
 ```go
 // Starts measurement of execution time of a code segment.
@@ -113,7 +113,7 @@ defer segment.Stop()
 ```
 
 ```go
-// A helper function to measure HTTP handlers by wrapping HandeFunc parameters.
+// A helper function to measure HTTP handlers by wrapping HandleFunc parameters.
 // Usage example:
 //   http.HandleFunc(agent.MeasureHandlerSegment("/some-path", someHandlerFunc))
 subsegment := agent.MeasureHandlerSegment(pattern, handlerFunc)
