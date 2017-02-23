@@ -76,14 +76,8 @@ func (sr *SegmentReporter) report(trigger string) {
 	for _, segmentGraph := range sr.segmentGraphs {
 		segmentGraph.evaluateP95()
 
-		if len(segmentGraph.children) > 0 {
-			metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentGraph.name, UnitMillisecond)
-			metric.createMeasurement(trigger, segmentGraph.measurement, segmentGraph)
-			sr.agent.messageQueue.addMessage("metric", metric.toMap())
-		}
-
-		metric := newMetric(sr.agent, TypeState, CategorySegments, segmentGraph.name, UnitMillisecond)
-		metric.createMeasurement(trigger, segmentGraph.measurement, nil)
+		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentGraph.name, UnitMillisecond)
+		metric.createMeasurement(trigger, segmentGraph.measurement, segmentGraph)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
