@@ -116,8 +116,7 @@ defer segment.Stop()
 // A helper function to measure HTTP handlers by wrapping HandleFunc parameters.
 // Usage example:
 //   http.HandleFunc(agent.MeasureHandlerSegment("/some-path", someHandlerFunc))
-subsegment := agent.MeasureHandlerSegment(pattern, handlerFunc)
-defer subsegment.Stop()
+pattern, wrappedHandlerFunc := agent.MeasureHandlerSegment(pattern, handlerFunc)
 ```
 
 
