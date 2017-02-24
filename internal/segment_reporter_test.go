@@ -19,10 +19,10 @@ func TestRecordSegment(t *testing.T) {
 
 	time.Sleep(150 * time.Millisecond)
 
-	segmentCounters := agent.segmentReporter.segmentCounters
+	segmentNodes := agent.segmentReporter.segmentNodes
 	agent.segmentReporter.report("timer")
 
-	seg1Counter := segmentCounters["seg1"]
+	seg1Counter := segmentNodes["seg1"]
 	if seg1Counter.name != "seg1" || seg1Counter.measurement < 10 {
 		t.Errorf("Measurement of seg1 is too low: %v", seg1Counter.measurement)
 	}

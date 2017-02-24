@@ -8,7 +8,7 @@ type SegmentReporter struct {
 	agent             *Agent
 	reportingStrategy *ReportingStrategy
 	recordLock        *sync.Mutex
-	segmentCounters   map[string]*BreakdownNode
+	segmentNodes      map[string]*BreakdownNode
 }
 
 func newSegmentReporter(agent *Agent) *SegmentReporter {
@@ -16,7 +16,7 @@ func newSegmentReporter(agent *Agent) *SegmentReporter {
 		agent:             agent,
 		reportingStrategy: nil,
 		recordLock:        &sync.Mutex{},
-		segmentCounters:   make(map[string]*BreakdownNode),
+		segmentNodes:      make(map[string]*BreakdownNode),
 	}
 
 	sr.reportingStrategy = newReportingStrategy(agent, 60, 60, nil,
@@ -45,13 +45,13 @@ func (sr *SegmentReporter) recordSegmentSync(name string, duration int64) {
 
 	sr.recordLock.Lock()
 
-	segmentCounter, exists := sr.segmentCounters[name]
+	segmentNode, exists := sr.segmentNodes[name]
 	if !exists {
-		segmentCounter = newBreakdownNode(name)
-		sr.segmentCounters[name] = segmentCounter
+		segmentNode = newBreakdownNode(name)
+		sr.segmentNodes[name] = segmentNode
 	}
 
-	segmentCounter.updateP95(float64(duration))
+	segmentNode.updateP95(float64(duration))
 
 	sr.recordLock.Unlock()
 }
@@ -59,15 +59,18 @@ func (sr *SegmentReporter) recordSegmentSync(name string, duration int64) {
 func (sr *SegmentReporter) report(trigger string) {
 	sr.recordLock.Lock()
 
-	for _, segmentCounter := range sr.segmentCounters {
-		segmentCounter.evaluateP95()
+	for _, segmentNode := range sr.segmentNodes {
+		segmentRoot := newBreakdownNode("root")
+		segmentRoot.addChild(segmentNode)
+		segmentRoot.evaluateP95()
+		segmentRoot.propagate()
 
-		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentCounter.name, UnitMillisecond)
-		metric.createMeasurement(trigger, segmentCounter.measurement, segmentCounter)
+		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentNode.name, UnitMillisecond)
+		metric.createMeasurement(trigger, segmentRoot.measurement, segmentRoot)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
-	sr.segmentCounters = make(map[string]*BreakdownNode)
+	sr.segmentNodes = make(map[string]*BreakdownNode)
 
 	sr.recordLock.Unlock()
 }
