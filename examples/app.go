@@ -203,11 +203,13 @@ func simulateSegments() {
 func simulateHandlerSegments() {
 	// start HTTP server
 	go func() {
-		http.HandleFunc(agent.MeasureHandlerSegment("/some-handler", func(w http.ResponseWriter, r *http.Request) {
+		http.HandleFunc(agent.MeasureHandlerFunc("/some-handler-func", func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(time.Duration(200+rand.Intn(50)) * time.Millisecond)
 
 			fmt.Fprintf(w, "OK")
 		}))
+
+		http.Handle(agent.MeasureHandler("/some-handler", http.StripPrefix("/some-handler", http.FileServer(http.Dir("/tmp")))))
 
 		if err := http.ListenAndServe(":5001", nil); err != nil {
 			log.Fatal(err)
@@ -219,7 +221,12 @@ func simulateHandlerSegments() {
 	for {
 		select {
 		case <-requestTicker.C:
-			res, err := http.Get("http://localhost:5001/some-handler")
+			res, err := http.Get("http://localhost:5001/some-handler-func")
+			if err == nil {
+				res.Body.Close()
+			}
+
+			res, err = http.Get("http://localhost:5001/some-handler")
 			if err == nil {
 				res.Body.Close()
 			}
@@ -416,7 +423,7 @@ func main() {
 	go simulateSegments()
 	go simulateHandlerSegments()
 	go simulateErrors()
-	go simulateSQL()
+	//go simulateSQL()
 	go simulateMongo()
 	go simulateRedigo()
 	go simulateGoredis()

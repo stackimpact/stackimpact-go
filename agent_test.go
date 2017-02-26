@@ -2,7 +2,9 @@ package stackimpact
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
@@ -31,15 +33,12 @@ func TestMeasureSegment(t *testing.T) {
 	}
 }
 
-func TestMeasureHandlerSegment(t *testing.T) {
+func TestMeasureHandler(t *testing.T) {
 	agent := NewAgent()
 
 	// start HTTP server
 	go func() {
-		http.HandleFunc(agent.MeasureHandlerSegment("/test", func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(100 * time.Millisecond)
-			fmt.Fprintf(w, "OK")
-		}))
+		http.Handle(agent.MeasureHandler("/test1", http.StripPrefix("/test1", http.FileServer(http.Dir("/tmp")))))
 
 		if err := http.ListenAndServe(":5010", nil); err != nil {
 			t.Error(err)
@@ -47,9 +46,40 @@ func TestMeasureHandlerSegment(t *testing.T) {
 		}
 	}()
 
-	waitForServer("http://localhost:5010/test")
+	waitForServer("http://localhost:5010/test1")
 
-	res, err := http.Get("http://localhost:5010/test")
+	res, err := http.Get("http://localhost:5010/test1")
+	if err != nil {
+		t.Error(err)
+		return
+	} else if res.StatusCode != 200 {
+		io.Copy(os.Stdout, res.Body)
+		t.Error(err)
+		return
+	} else {
+		defer res.Body.Close()
+	}
+}
+
+func TestMeasureHandlerFunc(t *testing.T) {
+	agent := NewAgent()
+
+	// start HTTP server
+	go func() {
+		http.HandleFunc(agent.MeasureHandlerFunc("/test2", func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Fprintf(w, "OK")
+		}))
+
+		if err := http.ListenAndServe(":5011", nil); err != nil {
+			t.Error(err)
+			return
+		}
+	}()
+
+	waitForServer("http://localhost:5011/test2")
+
+	res, err := http.Get("http://localhost:5011/test2")
 	if err != nil {
 		t.Error(err)
 		return

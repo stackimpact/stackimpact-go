@@ -93,7 +93,8 @@ func main() {
         AppEnvironment: "production",
     })
 
-    http.HandleFunc(agent.MeasureHandlerSegment("/", handler)) // MeasureHandlerSegment wrapper is optional
+    // use MeasureHandlerFunc or MeasureHandler to additionally measure HTTP request execution time.
+    http.HandleFunc(agent.MeasureHandlerFunc("/", handler)) 
     http.ListenAndServe(":8080", nil)
 }
 ```
@@ -113,10 +114,18 @@ defer segment.Stop()
 ```
 
 ```go
-// A helper function to measure HTTP handlers by wrapping HandleFunc parameters.
+// A helper function to measure HTTP handler execution by wrapping http.Handle method parameters.
 // Usage example:
-//   http.HandleFunc(agent.MeasureHandlerSegment("/some-path", someHandlerFunc))
-pattern, wrappedHandlerFunc := agent.MeasureHandlerSegment(pattern, handlerFunc)
+//   http.Handle(agent.MeasureHandler("/some-path", someHandler))
+pattern, wrappedHandler := agent.MeasureHandler(pattern, handler)
+```
+
+
+```go
+// A helper function to measure HTTP handler function execution by wrapping http.HandleFunc method parameters.
+// Usage example:
+//   http.HandleFunc(agent.MeasureHandlerFunc("/some-path", someHandlerFunc))
+pattern, wrappedHandlerFunc := agent.MeasureHandlerFunc(pattern, handlerFunc)
 ```
 
 

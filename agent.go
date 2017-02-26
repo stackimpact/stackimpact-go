@@ -93,15 +93,26 @@ func (a *Agent) MeasureSegment(segmentName string) *Segment {
 	return s
 }
 
-// A helper function to measure HTTP handler code execution
-// by wrapping HandeFunc parameters.
-func (a *Agent) MeasureHandlerSegment(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
+// A helper function to measure HTTP handler function execution
+// by wrapping http.HandleFunc method parameters.
+func (a *Agent) MeasureHandlerFunc(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
 	return pattern, func(w http.ResponseWriter, r *http.Request) {
 		segment := a.MeasureSegment(fmt.Sprintf("Handler %s", pattern))
 		defer segment.Stop()
 
 		handlerFunc(w, r)
 	}
+}
+
+// A helper function to measure HTTP handler execution
+// by wrapping http.Handle method parameters.
+func (a *Agent) MeasureHandler(pattern string, handler http.Handler) (string, http.Handler) {
+	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := a.MeasureSegment(fmt.Sprintf("Handler %s", pattern))
+		defer segment.Stop()
+
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // Aggregates and reports errors with regular intervals.
