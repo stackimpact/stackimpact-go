@@ -27,3 +27,15 @@ func TestRecordSegment(t *testing.T) {
 		t.Errorf("Measurement of seg1 is too low: %v", seg1Counter.measurement)
 	}
 }
+
+func BenchmarkRecordSegment(b *testing.B) {
+	agent := NewAgent()
+	agent.Debug = true
+
+	for i := 0; i < b.N; i++ {
+		agent.segmentReporter.recordSegment("seg1", 10)
+	}
+
+	// go test -v -run=^$ -bench=BenchmarkRecordSegment -cpuprofile=cpu.out ./internal/
+	// go tool pprof internal.test cpu.out
+}

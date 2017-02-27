@@ -5,7 +5,10 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 const TypeState string = "state"
@@ -78,6 +81,7 @@ type BreakdownNode struct {
 	numSamples  int64
 	reservoir   []float64
 	children    map[string]*BreakdownNode
+	updateLock  *sync.RWMutex
 }
 
 func newBreakdownNode(name string) *BreakdownNode {
@@ -87,12 +91,16 @@ func newBreakdownNode(name string) *BreakdownNode {
 		numSamples:  0,
 		reservoir:   nil,
 		children:    make(map[string]*BreakdownNode),
+		updateLock:  &sync.RWMutex{},
 	}
 
 	return bn
 }
 
 func (bn *BreakdownNode) findChild(name string) *BreakdownNode {
+	bn.updateLock.RLock()
+	defer bn.updateLock.RUnlock()
+
 	if child, exists := bn.children[name]; exists {
 		return child
 	}
@@ -101,6 +109,9 @@ func (bn *BreakdownNode) findChild(name string) *BreakdownNode {
 }
 
 func (bn *BreakdownNode) maxChild() *BreakdownNode {
+	bn.updateLock.RLock()
+	defer bn.updateLock.RUnlock()
+
 	var maxChild *BreakdownNode = nil
 	for _, child := range bn.children {
 		if maxChild == nil || child.measurement > maxChild.measurement {
@@ -111,6 +122,9 @@ func (bn *BreakdownNode) maxChild() *BreakdownNode {
 }
 
 func (bn *BreakdownNode) minChild() *BreakdownNode {
+	bn.updateLock.RLock()
+	defer bn.updateLock.RUnlock()
+
 	var minChild *BreakdownNode = nil
 	for _, child := range bn.children {
 		if minChild == nil || child.measurement < minChild.measurement {
@@ -121,10 +135,16 @@ func (bn *BreakdownNode) minChild() *BreakdownNode {
 }
 
 func (bn *BreakdownNode) addChild(child *BreakdownNode) {
+	bn.updateLock.Lock()
+	defer bn.updateLock.Unlock()
+
 	bn.children[child.name] = child
 }
 
 func (bn *BreakdownNode) removeChild(child *BreakdownNode) {
+	bn.updateLock.Lock()
+	defer bn.updateLock.Unlock()
+
 	delete(bn.children, child.name)
 }
 
@@ -173,22 +193,37 @@ func (bn *BreakdownNode) propagate() {
 }
 
 func (bn *BreakdownNode) increment(value float64, count int64) {
-	bn.measurement += value
-	bn.numSamples += count
+	AddFloat64(&bn.measurement, value)
+	atomic.AddInt64(&bn.numSamples, count)
 }
 
 func (bn *BreakdownNode) updateP95(value float64) {
+	rLen := 0
+	rExists := true
+
+	bn.updateLock.RLock()
 	if bn.reservoir == nil {
-		bn.reservoir = make([]float64, 0, ReservoirSize)
-	}
-
-	if len(bn.reservoir) < ReservoirSize {
-		bn.reservoir = append(bn.reservoir, value)
+		rExists = false
 	} else {
-		bn.reservoir[rand.Intn(ReservoirSize)] = value
+		rLen = len(bn.reservoir)
+	}
+	bn.updateLock.RUnlock()
+
+	if !rExists {
+		bn.updateLock.Lock()
+		bn.reservoir = make([]float64, 0, ReservoirSize)
+		bn.updateLock.Unlock()
 	}
 
-	bn.numSamples += 1
+	if rLen < ReservoirSize {
+		bn.updateLock.Lock()
+		bn.reservoir = append(bn.reservoir, value)
+		bn.updateLock.Unlock()
+	} else {
+		StoreFloat64(&bn.reservoir[rand.Intn(ReservoirSize)], value)
+	}
+
+	atomic.AddInt64(&bn.numSamples, 1)
 }
 
 func (bn *BreakdownNode) evaluateP95() {
@@ -331,4 +366,24 @@ func (m *Metric) toMap() map[string]interface{} {
 	}
 
 	return metricMap
+}
+
+func AddFloat64(addr *float64, val float64) (new float64) {
+	for {
+		old := math.Float64frombits(atomic.LoadUint64((*uint64)(unsafe.Pointer(addr))))
+		new = old + val
+		if atomic.CompareAndSwapUint64(
+			(*uint64)(unsafe.Pointer(addr)),
+			math.Float64bits(old),
+			math.Float64bits(new),
+		) {
+			break
+		}
+	}
+
+	return
+}
+
+func StoreFloat64(addr *float64, val float64) {
+	atomic.StoreUint64((*uint64)(unsafe.Pointer(addr)), math.Float64bits(val))
 }

@@ -35,3 +35,15 @@ func TestRecordError(t *testing.T) {
 		t.Error("The test function is not found in the error profile")
 	}
 }
+
+func BenchmarkRecordError(b *testing.B) {
+	agent := NewAgent()
+	agent.Debug = true
+
+	for i := 0; i < b.N; i++ {
+		agent.errorReporter.recordError("group1", errors.New("error1"), 0)
+	}
+
+	// go test -v -run=^$ -bench=BenchmarkRecordError -cpuprofile=cpu.out ./internal/
+	// go tool pprof internal.test cpu.out
+}

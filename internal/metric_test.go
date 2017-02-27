@@ -125,3 +125,21 @@ func TestBreakdownP95Big(t *testing.T) {
 		t.Errorf("root measurement should be in [200, 250], but is %v", root.measurement)
 	}
 }
+
+func TestAddFloat64(t *testing.T) {
+	f := float64(10.3)
+	AddFloat64(&f, float64(5.2))
+
+	if f != 15.5 {
+		t.Errorf("f should be 15.5, but is %v", f)
+	}
+}
+
+func TestStoreFloat64(t *testing.T) {
+	f := float64(10.3)
+	StoreFloat64(&f, float64(5.2))
+
+	if f != 5.2 {
+		t.Errorf("f should be 5.2, but is %v", f)
+	}
+}

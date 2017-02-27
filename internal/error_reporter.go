@@ -9,7 +9,7 @@ import (
 type ErrorReporter struct {
 	agent             *Agent
 	reportingStrategy *ReportingStrategy
-	recordLock        *sync.Mutex
+	recordLock        *sync.RWMutex
 	errorGraphs       map[string]*BreakdownNode
 }
 
@@ -17,7 +17,7 @@ func newErrorReporter(agent *Agent) *ErrorReporter {
 	er := &ErrorReporter{
 		agent:             agent,
 		reportingStrategy: nil,
-		recordLock:        &sync.Mutex{},
+		recordLock:        &sync.RWMutex{},
 		errorGraphs:       make(map[string]*BreakdownNode),
 	}
 
@@ -58,23 +58,7 @@ func callerFrames(skip int) []string {
 	return frames
 }
 
-func (er *ErrorReporter) recordError(group string, err error, skip int) {
-	go er.recordErrorSync(group, err, callerFrames(skip+1))
-}
-
-func (er *ErrorReporter) recordErrorSync(group string, err error, frames []string) {
-	if err == nil {
-		er.agent.log("Missing error object")
-		return
-	}
-
-	er.recordLock.Lock()
-
-	errorGraph, exists := er.errorGraphs[group]
-	if !exists {
-		errorGraph = newBreakdownNode(group)
-		er.errorGraphs[group] = errorGraph
-	}
+func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode, err error, frames []string) {
 	errorGraph.increment(1, 0)
 
 	currentNode := errorGraph.findOrAddChild(err.Error())
@@ -84,20 +68,50 @@ func (er *ErrorReporter) recordErrorSync(group string, err error, frames []strin
 		currentNode = currentNode.findOrAddChild(f)
 		currentNode.increment(1, 0)
 	}
+}
 
-	er.recordLock.Unlock()
+func (er *ErrorReporter) recordError(group string, err error, skip int) {
+	frames := callerFrames(skip + 1)
+
+	if err == nil {
+		er.agent.log("Missing error object")
+		return
+	}
+
+	// Error graph exists for the current interval.
+	er.recordLock.RLock()
+	errorGraph, exists := er.errorGraphs[group]
+	if exists {
+		er.incrementError(group, errorGraph, err, frames)
+	}
+	er.recordLock.RUnlock()
+
+	// Error graph does not exist yet for the current interval.
+	if !exists {
+		er.recordLock.Lock()
+		errorGraph, exists := er.errorGraphs[group]
+		if !exists {
+			// If segment was not created by other recordError call between locks, create it.
+			errorGraph = newBreakdownNode(group)
+			er.errorGraphs[group] = errorGraph
+		}
+		er.recordLock.Unlock()
+
+		er.recordLock.RLock()
+		er.incrementError(group, errorGraph, err, frames)
+		er.recordLock.RUnlock()
+	}
 }
 
 func (er *ErrorReporter) report(trigger string) {
 	er.recordLock.Lock()
+	outgoing := er.errorGraphs
+	er.errorGraphs = make(map[string]*BreakdownNode)
+	er.recordLock.Unlock()
 
-	for _, errorGraph := range er.errorGraphs {
+	for _, errorGraph := range outgoing {
 		metric := newMetric(er.agent, TypeState, CategoryErrorProfile, errorGraph.name, UnitNone)
 		metric.createMeasurement(trigger, errorGraph.measurement, errorGraph)
 		er.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
-
-	er.errorGraphs = make(map[string]*BreakdownNode)
-
-	er.recordLock.Unlock()
 }

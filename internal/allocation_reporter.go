@@ -125,7 +125,7 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 
 		value := s.Value[inuseSpaceTypeIndex]
 		count := s.Value[inuseObjectsTypeIndex]
-		if value == 0 || value == 0 {
+		if value == 0 {
 			continue
 		}
 		rootNode.increment(float64(value), int64(count))
