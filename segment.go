@@ -7,8 +7,8 @@ import (
 type Segment struct {
 	agent     *Agent
 	Name      string
-	timestamp int64
-	Duration  int64
+	timestamp float64
+	Duration  float64
 }
 
 func newSegment(agent *Agent, name string) *Segment {
@@ -22,12 +22,12 @@ func newSegment(agent *Agent, name string) *Segment {
 }
 
 func (s *Segment) start() {
-	s.timestamp = time.Now().UnixNano() / 1e6
+	s.timestamp = float64(time.Now().UnixNano()) / 1e6
 }
 
 // Stops the measurement of a code segment execution time.
 func (s *Segment) Stop() {
-	s.Duration = time.Now().UnixNano()/1e6 - s.timestamp
+	s.Duration = float64(time.Now().UnixNano())/1e6 - s.timestamp
 
 	s.agent.internalAgent.RecordSegment(s.Name, s.Duration)
 }

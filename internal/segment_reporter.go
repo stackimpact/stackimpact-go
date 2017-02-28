@@ -33,7 +33,7 @@ func (sr *SegmentReporter) start() {
 	sr.reportingStrategy.start()
 }
 
-func (sr *SegmentReporter) recordSegment(name string, duration int64) {
+func (sr *SegmentReporter) recordSegment(name string, duration float64) {
 	if name == "" {
 		sr.agent.log("Empty segment name")
 		return
@@ -43,7 +43,7 @@ func (sr *SegmentReporter) recordSegment(name string, duration int64) {
 	sr.recordLock.RLock()
 	segmentNode, exists := sr.segmentNodes[name]
 	if exists {
-		segmentNode.updateP95(float64(duration))
+		segmentNode.updateP95(duration)
 	}
 	sr.recordLock.RUnlock()
 
@@ -59,7 +59,7 @@ func (sr *SegmentReporter) recordSegment(name string, duration int64) {
 		sr.recordLock.Unlock()
 
 		sr.recordLock.RLock()
-		segmentNode.updateP95(float64(duration))
+		segmentNode.updateP95(duration)
 		sr.recordLock.RUnlock()
 	}
 }
