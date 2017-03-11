@@ -2,7 +2,7 @@
 
 ## Overview
 
-StackImpact is a performance profiling and monitoring service for production Go applications. It gives you continuous visibility with line-of-code precision into application performance, such as CPU, memory and I/O hot spots as well execution bottlenecks, allowing to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
+StackImpact is a performance profiling and monitoring service for production Go applications. It gives developers continuous visibility with line-of-code precision into application performance, such as CPU, memory and I/O hot spots as well execution bottlenecks, allowing developers to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
 
 
 
@@ -15,7 +15,7 @@ StackImpact is a performance profiling and monitoring service for production Go 
 * Alerts on hot spot anomalies.
 * Multiple account users for team collaboration.
 
-Learn more about [features](https://stackimpact.com/features/) page (with screenshots).
+Learn more on the [features](https://stackimpact.com/features/) page (with screenshots).
 
 
 #### Documentation
@@ -50,7 +50,7 @@ And import the package `github.com/stackimpact/stackimpact-go` in your applicati
 
 #### Configuring the agent
 
-Start the agent by specifying agent key and application name. The agent key can be found in your account's Configuration section.
+Start the agent by specifying the agent key and application name. The agent key can be found in your account's Configuration section.
 
 ```go
 agent := stackimpact.NewAgent();
@@ -63,9 +63,8 @@ agent.Start(stackimpact.Options{
 Other initialization options:
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
-* `HostName` (Optional) By default host name will be the OS hostname.
+* `HostName` (Optional) By default, host name will be the OS hostname.
 * `Debug` (Optional) Enables debug logging.
-* `DashboardAddress` (Optional) Used by on-premises deployments only.
 
 
 Example:
@@ -102,12 +101,12 @@ func main() {
 
 #### Measuring code segments (optional)
 
-To measure execution time of arbitrary parts of application, the segment API can be used.
+To measure the execution time of arbitrary parts of the application, the segment API can be used.
 
 ```go
 // Starts measurement of execution time of a code segment.
-// To stop measurement call Stop on returned Segment object.
-// After calling Stop the segment is recorded, aggregated and
+// To stop measurement, call Stop on returned Segment object.
+// After calling Stop, the segment is recorded, aggregated and
 // reported with regular intervals.
 segment := agent.MeasureSegment("Segment1")
 defer segment.Stop()
@@ -151,21 +150,21 @@ Recording and recovering from panics:
 
 ```go
 // Aggregates and reports panics with regular intervals. This function also
-// recovers from panics
+// recovers from panics.
 defer agent.RecordAndRecoverPanic()
 ```
 
 
 #### Analyzing performance data in the Dashboard
 
-Once your application is restarted, start observing regular and anomaly-triggered CPU, memory, IO, and other hot spot profiles, execution bottlenecks as well as process metrics in the [Dashboard](https://dashboard.stackimpact.com/).
+Once your application is restarted, you can start observing regular and anomaly-triggered CPU, memory, I/O, and other hot spot profiles, execution bottlenecks as well as process metrics in the [Dashboard](https://dashboard.stackimpact.com/).
 
 
 #### Troubleshooting
 
-To enable debug logging, add `Debug: true` to startup options. If debug log doesn't give you any hints on how to fix a problem, please report it to our support team in your account's Support section.
+To enable debug logging, add `Debug: true` to startup options. If the debug log doesn't give you any hints on how to fix a problem, please report it to our support team in your account's Support section.
 
 
 ## Overhead
 
-Reporting CPU, network and system profiles requires regular and anomaly-triggered profiling and tracing activation for short periods of time. Unlike memory profiling and process-level metric reporting, they produce some overhead when active. The agent makes sure the profiling is active not more than 5% of the time and, while active, the overhead stays very low and has no effect on application execution.
+Reporting CPU, network and system profiles requires regular and anomaly-triggered profiling and tracing activation for short periods of time. Unlike memory profiling and process-level metric reporting, they produce some overhead when active. The agent makes sure the profiling is active no more than 5% of the time and while active the overhead stays very low and has no effect on application execution.

@@ -43,11 +43,7 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 		reportingStrategy: nil,
 	}
 
-	ar.reportingStrategy = newReportingStrategy(agent, 30, 300,
-		func() float64 {
-			memAlloc := readMemAlloc()
-			return float64(int64(memAlloc / 1e6))
-		},
+	ar.reportingStrategy = newReportingStrategy(agent, 30, 300, nil,
 		func(trigger string) {
 			ar.agent.log("Allocation report triggered by reporting strategy, trigger=%v", trigger)
 			ar.report(trigger)
