@@ -103,7 +103,7 @@ func main() {
 
 *The use of Segment API is optional.*
 
-To measure the execution time of arbitrary parts of the application, the Segment API can be used. The agent continuousely watches segment execution time and initiates profining when anomalies are detected.
+To measure the execution time of arbitrary parts of the application, the Segment API can be used. The agent continuously watches segment execution time and initiates profiling when anomalies are detected.
 
 ```go
 // Starts measurement of execution time of a code segment.
