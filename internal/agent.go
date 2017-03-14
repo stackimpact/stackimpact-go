@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.3.13"
+const AgentVersion = "1.4.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -162,13 +162,6 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	}
 
 	a.errorReporter.recordError(group, err, skipFrames+1)
-}
-
-func (a *Agent) setProfilingActive(val bool) {
-	a.profilingLock.Lock()
-	defer a.profilingLock.Unlock()
-
-	a.profilingActive = val
 }
 
 func (a *Agent) isProfilingActive() bool {

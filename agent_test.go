@@ -1,13 +1,13 @@
 package stackimpact
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"testing"
 	"time"
-	"errors"
 )
 
 func TestMeasureSegment(t *testing.T) {
@@ -123,12 +123,11 @@ func waitForServer(url string) {
 	}
 }
 
-
 func BenchmarkMeasureSegment(b *testing.B) {
 	agent := NewAgent()
 	agent.Start(Options{
-	  AgentKey: "key1",
-	  AppName: "app1",
+		AgentKey: "key1",
+		AppName:  "app1",
 	})
 
 	for i := 0; i < b.N; i++ {
@@ -140,13 +139,11 @@ func BenchmarkMeasureSegment(b *testing.B) {
 	// go tool pprof internal.test cpu.out
 }
 
-
-
 func BenchmarkRecordError(b *testing.B) {
 	agent := NewAgent()
 	agent.Start(Options{
-	  AgentKey: "key1",
-	  AppName: "app1",
+		AgentKey: "key1",
+		AppName:  "app1",
 	})
 
 	err := errors.New("error1")
@@ -158,5 +155,3 @@ func BenchmarkRecordError(b *testing.B) {
 	// go test -v -run=^$ -bench=BenchmarkRecordError -cpuprofile=cpu.out
 	// go tool pprof internal.test cpu.out
 }
-
-

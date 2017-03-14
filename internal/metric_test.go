@@ -143,3 +143,12 @@ func TestStoreFloat64(t *testing.T) {
 		t.Errorf("f should be 5.2, but is %v", f)
 	}
 }
+
+func TestLoadFloat64(t *testing.T) {
+	f := float64(10.3)
+	l := LoadFloat64(&f)
+
+	if l != 10.3 {
+		t.Errorf("l should be 10.3, but is %v", f)
+	}
+}

@@ -14,11 +14,11 @@ import (
 
 var verbose bool = false
 
-func TestAdjustTraceDurtaion(t *testing.T) {
+func TestEstimateTraceDurtaion(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	duration, _ := agent.blockReporter.adjustTraceDuration(10)
+	duration, _ := agent.blockReporter.estimateTraceDuration()
 
 	if duration < 1000 {
 		t.Errorf("Duration should be < 1000, but is %v", duration)
@@ -34,8 +34,7 @@ func TestAdjustTraceDurtaion(t *testing.T) {
 		}
 	}()
 
-	duration, _ = agent.blockReporter.adjustTraceDuration(10)
-
+	duration, _ = agent.blockReporter.estimateTraceDuration()
 	done <- true
 
 	if duration > 100 {

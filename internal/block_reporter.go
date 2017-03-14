@@ -24,19 +24,26 @@ type Record struct {
 }
 
 type BlockReporter struct {
-	agent             *Agent
-	reportingStrategy *ReportingStrategy
+	agent         *Agent
+	reportTrigger *ReportTrigger
 }
 
 func newBlockReporter(agent *Agent) *BlockReporter {
 	br := &BlockReporter{
-		agent:             agent,
-		reportingStrategy: nil,
+		agent:         agent,
+		reportTrigger: nil,
 	}
 
-	br.reportingStrategy = newReportingStrategy(agent, 75, 300,
-		func() float64 {
-			return float64(runtime.NumGoroutine())
+	br.reportTrigger = newReportTrigger(agent, 75, 300,
+		func() map[string]float64 {
+			metrics := map[string]float64{"num-goroutines": float64(runtime.NumGoroutine())}
+
+			segmentDurations := br.agent.segmentReporter.readLastDurations()
+			for name, duration := range segmentDurations {
+				metrics[name] = duration
+			}
+
+			return metrics
 		},
 		func(trigger string) {
 			br.agent.log("Trace report triggered by reporting strategy, trigger=%v", trigger)
@@ -48,7 +55,7 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 }
 
 func (br *BlockReporter) start() {
-	br.reportingStrategy.start()
+	br.reportTrigger.start()
 }
 
 func (br *BlockReporter) report(trigger string) {
@@ -56,13 +63,14 @@ func (br *BlockReporter) report(trigger string) {
 		return
 	}
 
-	duration, aerr := br.adjustTraceDuration(10)
+	duration, aerr := br.estimateTraceDuration()
 	if aerr != nil {
 		br.agent.error(aerr)
 		return
 	}
 
-	if duration < 1 {
+	if duration < 5 {
+		br.agent.log("Trace profiling duration is less than 5 milliseconds, returing.")
 		return
 	}
 
@@ -401,7 +409,7 @@ func (br *BlockReporter) createTraceCallGraph(
 	return rootNode, nil
 }
 
-func (br *BlockReporter) adjustTraceDuration(duration int) (int64, error) {
+func (br *BlockReporter) estimateTraceDuration() (int64, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
@@ -411,7 +419,9 @@ func (br *BlockReporter) adjustTraceDuration(duration int) (int64, error) {
 	}
 
 	done := make(chan bool)
-	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
+
+	probeDuration := 10
+	timer := time.NewTimer(time.Duration(probeDuration) * time.Millisecond)
 	go func() {
 		defer br.agent.recoverAndLog()
 
@@ -433,14 +443,16 @@ func (br *BlockReporter) adjustTraceDuration(duration int) (int64, error) {
 
 	size := len(events)
 
-	// estimate duration, which will limit max allowed overhead after parsing trace log
-	// at max 20MB, which is about 10000 events (10k objects ~ 2mb)
-	d := int64((100000.0 / float64(size)) * float64(duration))
-	if d > 10000 {
-		d = 10000
+	// Estimate duration, which will limit max memory overhead after parsing trace log
+	// to max 10MB, which is around max 20,000 events.
+	// duration = (max_overhead / probe_size) * probe_duration
+	br.agent.log("Probe trace log size: %v", size)
+	duration := int64((20000.0 / float64(size)) * float64(probeDuration))
+	if duration > 5000 {
+		duration = 5000
 	}
 
-	return d, nil
+	return duration, nil
 }
 
 func (br *BlockReporter) readTraceEvents(duration int64) ([]*pprofTrace.Event, error) {
@@ -479,6 +491,7 @@ func (br *BlockReporter) readTraceEvents(duration int64) ([]*pprofTrace.Event, e
 		return nil, err
 	}
 
+	br.agent.log("Trace log size: %v", len(events))
 	if br.agent.Debug {
 		br.agent.log("Memory overhead (bytes): %v", int64(readMemAlloc()-startMem))
 	}

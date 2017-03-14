@@ -13,23 +13,23 @@ import (
 )
 
 type CPUReporter struct {
-	agent             *Agent
-	reportingStrategy *ReportingStrategy
+	agent         *Agent
+	reportTrigger *ReportTrigger
 }
 
 func newCPUReporter(agent *Agent) *CPUReporter {
 	cr := &CPUReporter{
-		agent:             agent,
-		reportingStrategy: nil,
+		agent:         agent,
+		reportTrigger: nil,
 	}
 
 	baseCpuTime, _ := readCPUTime()
-	cr.reportingStrategy = newReportingStrategy(agent, 45, 300,
-		func() float64 {
+	cr.reportTrigger = newReportTrigger(agent, 45, 300,
+		func() map[string]float64 {
 			cpuTime, _ := readCPUTime()
-			cpuUsage := float64(int((cpuTime - baseCpuTime) / 1e6))
+			cpuUsage := float64(cpuTime - baseCpuTime)
 			baseCpuTime = cpuTime
-			return cpuUsage
+			return map[string]float64{"cpu-usage": cpuUsage}
 		},
 		func(trigger string) {
 			cr.agent.log("CPU report triggered by reporting strategy, trigger=%v", trigger)
@@ -41,7 +41,7 @@ func newCPUReporter(agent *Agent) *CPUReporter {
 }
 
 func (cr *CPUReporter) start() {
-	cr.reportingStrategy.start()
+	cr.reportTrigger.start()
 }
 
 func (cr *CPUReporter) report(trigger string) {

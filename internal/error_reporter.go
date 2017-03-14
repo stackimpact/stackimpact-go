@@ -7,21 +7,21 @@ import (
 )
 
 type ErrorReporter struct {
-	agent             *Agent
-	reportingStrategy *ReportingStrategy
-	recordLock        *sync.RWMutex
-	errorGraphs       map[string]*BreakdownNode
+	agent         *Agent
+	reportTrigger *ReportTrigger
+	recordLock    *sync.RWMutex
+	errorGraphs   map[string]*BreakdownNode
 }
 
 func newErrorReporter(agent *Agent) *ErrorReporter {
 	er := &ErrorReporter{
-		agent:             agent,
-		reportingStrategy: nil,
-		recordLock:        &sync.RWMutex{},
-		errorGraphs:       make(map[string]*BreakdownNode),
+		agent:         agent,
+		reportTrigger: nil,
+		recordLock:    &sync.RWMutex{},
+		errorGraphs:   make(map[string]*BreakdownNode),
 	}
 
-	er.reportingStrategy = newReportingStrategy(agent, 60, 60, nil,
+	er.reportTrigger = newReportTrigger(agent, 60, 60, nil,
 		func(trigger string) {
 			er.agent.log("Error report triggered by reporting strategy, trigger=%v", trigger)
 			er.report(trigger)
@@ -32,7 +32,7 @@ func newErrorReporter(agent *Agent) *ErrorReporter {
 }
 
 func (er *ErrorReporter) start() {
-	er.reportingStrategy.start()
+	er.reportTrigger.start()
 }
 
 func callerFrames(skip int) []string {

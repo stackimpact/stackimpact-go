@@ -370,7 +370,7 @@ func (m *Metric) toMap() map[string]interface{} {
 
 func AddFloat64(addr *float64, val float64) (new float64) {
 	for {
-		old := math.Float64frombits(atomic.LoadUint64((*uint64)(unsafe.Pointer(addr))))
+		old := LoadFloat64(addr)
 		new = old + val
 		if atomic.CompareAndSwapUint64(
 			(*uint64)(unsafe.Pointer(addr)),
@@ -386,4 +386,8 @@ func AddFloat64(addr *float64, val float64) (new float64) {
 
 func StoreFloat64(addr *float64, val float64) {
 	atomic.StoreUint64((*uint64)(unsafe.Pointer(addr)), math.Float64bits(val))
+}
+
+func LoadFloat64(addr *float64) float64 {
+	return math.Float64frombits(atomic.LoadUint64((*uint64)(unsafe.Pointer(addr))))
 }

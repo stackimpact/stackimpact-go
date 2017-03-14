@@ -147,7 +147,7 @@ func simulateSyscallWait() {
 		go func() {
 			_, err := exec.Command("sleep", "1").Output()
 			if err != nil {
-				log.Fatal(err)
+				fmt.Println(err)
 			}
 
 			done <- true
@@ -285,32 +285,32 @@ func simulateErrors() {
 func simulateSQL() {
 	db, err := sql.Open("mysql", "test:test@/test")
 	if err != nil {
-		panic(err.Error())
+		fmt.Println(err)
 	}
 	defer db.Close()
 
 	stmtIns, err := db.Prepare("INSERT INTO test_table VALUES( ?, ? )")
 	if err != nil {
-		panic(err.Error())
+		fmt.Println(err)
 	}
 	defer stmtIns.Close()
 
 	stmtOut, err := db.Prepare("SELECT name FROM test_table WHERE id = ?")
 	if err != nil {
-		panic(err.Error())
+		fmt.Println(err)
 	}
 	defer stmtOut.Close()
 
 	for {
 		_, err = db.Exec("DELETE FROM test_table")
 		if err != nil {
-			panic(err.Error())
+			fmt.Println(err)
 		}
 
 		for i := 1; i <= 25; i++ {
 			_, err = stmtIns.Exec(i, fmt.Sprintf("text%v", i))
 			if err != nil {
-				panic(err.Error())
+				fmt.Println(err)
 			}
 		}
 
@@ -318,7 +318,7 @@ func simulateSQL() {
 
 		err = stmtOut.QueryRow(10).Scan(&text)
 		if err != nil {
-			panic(err.Error())
+			fmt.Println(err)
 		}
 
 		time.Sleep(500 * time.Millisecond)
@@ -333,7 +333,7 @@ type TestDoc struct {
 func simulateMongo() {
 	session, err := mgo.Dial("mongodb://localhost")
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	defer session.Close()
 
@@ -342,18 +342,18 @@ func simulateMongo() {
 	for {
 		_, err = collection.RemoveAll(bson.M{})
 		if err != nil {
-			panic(err)
+			fmt.Println(err)
 		}
 
 		_, err = collection.UpsertId("1", &TestDoc{"1", "text1"})
 		if err != nil {
-			panic(err)
+			fmt.Println(err)
 		}
 
 		var testDocs []TestDoc
 		err := collection.Find(nil).All(&testDocs)
 		if err != nil {
-			panic(err)
+			fmt.Println(err)
 		}
 
 		time.Sleep(300 * time.Millisecond)
@@ -363,7 +363,7 @@ func simulateMongo() {
 func simulateRedigo() {
 	client, err := redigo.Dial("tcp", "localhost:6379")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer client.Close()
 

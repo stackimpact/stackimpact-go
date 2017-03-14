@@ -99,9 +99,11 @@ func main() {
 ```
 
 
-#### Measuring code segments (optional)
+#### Measuring code segments
 
-To measure the execution time of arbitrary parts of the application, the segment API can be used.
+*The use of Segment API is optional.*
+
+To measure the execution time of arbitrary parts of the application, the Segment API can be used. The agent continuousely watches segment execution time and initiates profining when anomalies are detected.
 
 ```go
 // Starts measurement of execution time of a code segment.
@@ -128,7 +130,10 @@ pattern, wrappedHandlerFunc := agent.MeasureHandlerFunc(pattern, handlerFunc)
 ```
 
 
-#### Monitoring errors (optional)
+#### Monitoring errors
+
+*The use of Error API is optional.*
+
 
 To monitor exceptions and panics with stack traces, the error recording API can be used.
 
@@ -167,4 +172,4 @@ To enable debug logging, add `Debug: true` to startup options. If the debug log 
 
 ## Overhead
 
-Reporting CPU, network and system profiles requires regular and anomaly-triggered profiling and tracing activation for short periods of time. Unlike memory profiling and process-level metric reporting, they produce some overhead when active. The agent makes sure the profiling is active no more than 5% of the time and while active the overhead stays very low and has no effect on application execution.
+The agent overhead is measured to be less than 1% for applications under high load.
