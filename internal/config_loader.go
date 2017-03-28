@@ -27,9 +27,9 @@ func (cl *ConfigLoader) start() {
 
 	loadTicker := time.NewTicker(120 * time.Second)
 	go func() {
-		for {
-			defer cl.agent.recoverAndLog()
+		defer cl.agent.recoverAndLog()
 
+		for {
 			select {
 			case <-loadTicker.C:
 				cl.load()

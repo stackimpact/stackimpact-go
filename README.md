@@ -55,8 +55,8 @@ Start the agent by specifying the agent key and application name. The agent key 
 ```go
 agent := stackimpact.NewAgent();
 agent.Start(stackimpact.Options{
-    AgentKey: "agent key here",
-    AppName: "MyGoApp",
+	AgentKey: "agent key here",
+	AppName: "MyGoApp",
 })
 ```
 
@@ -73,28 +73,28 @@ Example:
 package main
 
 import (
-  	"fmt"
-  	"net/http"
+	"fmt"
+	"net/http"
 
-  	"github.com/stackimpact/stackimpact-go"
+	"github.com/stackimpact/stackimpact-go"
 )
 
 func handler(w http.ResponseWriter, r *http.Request) {
-  	fmt.Fprintf(w, "Hello world!")
+	fmt.Fprintf(w, "Hello world!")
 }
 
 func main() {
-  	agent := stackimpact.NewAgent()
-    agent.Start(stackimpact.Options{
-        AgentKey: "agent key here",
-        AppName: "Basic Go Server",
-        AppVersion: "1.0.0",
-        AppEnvironment: "production",
-    })
+	agent := stackimpact.NewAgent()
+	agent.Start(stackimpact.Options{
+		AgentKey: "agent key here",
+		AppName: "Basic Go Server",
+		AppVersion: "1.0.0",
+		AppEnvironment: "production",
+	})
 
-    // use MeasureHandlerFunc or MeasureHandler to additionally measure HTTP request execution time.
-    http.HandleFunc(agent.MeasureHandlerFunc("/", handler)) 
-    http.ListenAndServe(":8080", nil)
+	// use MeasureHandlerFunc or MeasureHandler to additionally measure HTTP request execution time.
+	http.HandleFunc(agent.MeasureHandlerFunc("/", handler)) 
+	http.ListenAndServe(":8080", nil)
 }
 ```
 

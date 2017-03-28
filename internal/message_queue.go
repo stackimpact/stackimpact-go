@@ -35,9 +35,9 @@ func (mq *MessageQueue) start() {
 	flushTicker := time.NewTicker(5 * time.Second)
 
 	go func() {
-		for {
-			defer mq.agent.recoverAndLog()
+		defer mq.agent.recoverAndLog()
 
+		for {
 			select {
 			case <-flushTicker.C:
 				mq.queueLock.Lock()
