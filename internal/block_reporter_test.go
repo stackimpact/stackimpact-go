@@ -20,8 +20,8 @@ func TestEstimateTraceDurtaion(t *testing.T) {
 
 	duration, _ := agent.blockReporter.estimateTraceDuration()
 
-	if duration < 1000 {
-		t.Errorf("Duration should be < 1000, but is %v", duration)
+	if duration < 100 {
+		t.Errorf("Duration should be > 100, but is %v", duration)
 	}
 
 	done := make(chan bool)

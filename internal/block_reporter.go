@@ -514,9 +514,6 @@ func (br *BlockReporter) readTraceEvents(duration int64) ([]*pprofTrace.Event, e
 	}
 	events = selectEvents(events, selectorFunc)
 
-	// GC filtered trace events
-	runtime.GC()
-
 	err = symbolizeEvents(events)
 	if err != nil {
 		return nil, err

@@ -148,7 +148,6 @@ func (ar *AllocationReporter) readHeapProfile() (*profile.Profile, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
-	runtime.GC()
 	err := pprof.WriteHeapProfile(w)
 	if err != nil {
 		return nil, err
