@@ -163,17 +163,18 @@ func simulateLockWait() {
 	for {
 		done := make(chan bool)
 
-		lock := &sync.Mutex{}
+		lock := &sync.RWMutex{}
 		lock.Lock()
 
 		go func() {
-			lock.Lock()
+			lock.RLock()
+			lock.RUnlock()
 
 			done <- true
 		}()
 
 		go func() {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			lock.Unlock()
 		}()
 
@@ -404,12 +405,11 @@ func simulateGoredis() {
 
 func main() {
 	// StackImpact initialization
-	agent = stackimpact.NewAgent()
-	agent.Start(stackimpact.Options{
+	agent = stackimpact.Start(stackimpact.Options{
 		AgentKey:         os.Getenv("AGENT_KEY"),
 		AppName:          "ExampleGoApp",
 		AppVersion:       "1.0.0",
-		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // on-premises only
+		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // test only
 		Debug:            true,
 	})
 	// end StackImpact initialization

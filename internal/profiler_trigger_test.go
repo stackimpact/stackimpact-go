@@ -10,17 +10,17 @@ func TestUpdateLastReportTs(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	rt := newReportTrigger(agent, 100, 100, nil, nil)
+	pt := newProfilerTrigger(agent, 100, 100, nil, nil)
 
-	if rt.lastReportTs != 0 {
-		t.Errorf("Last report timestamp should be 0, but is %v", rt.lastReportTs)
+	if pt.lastTriggerTS != 0 {
+		t.Errorf("Last report timestamp should be 0, but is %v", pt.lastTriggerTS)
 	}
 
 	now := time.Now().Unix()
-	rt.updateLastReportTs()
+	pt.updateLastTriggerTS()
 
-	if rt.lastReportTs < now {
-		t.Errorf("Last report timestamp should be >= %v, but is %v", now, rt.lastReportTs)
+	if pt.lastTriggerTS < now {
+		t.Errorf("Last report timestamp should be >= %v, but is %v", now, pt.lastTriggerTS)
 	}
 }
 
@@ -28,21 +28,21 @@ func TestDetectAnomaly(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	rt := newReportTrigger(agent, 100, 100,
+	pt := newProfilerTrigger(agent, 100, 100,
 		func() map[string]float64 {
 			return map[string]float64{"test-val": 90.0}
 		},
 		nil)
 
-	rt.metrics["test-val"] = make([]float64, 0, 45)
+	pt.metrics["test-val"] = make([]float64, 0, 45)
 	for i := 0; i < 30; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(rand.Intn(20)))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(rand.Intn(20)))
 	}
 	for i := 0; i < 15; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(90.0))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(90.0))
 	}
 
-	if !rt.detectAnomaly() {
+	if !pt.detectAnomaly() {
 		t.Error("Didn't detect anomaly")
 	}
 }
@@ -51,21 +51,21 @@ func TestDetectAnomalyNotEnoughData(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	rt := newReportTrigger(agent, 100, 100,
+	pt := newProfilerTrigger(agent, 100, 100,
 		func() map[string]float64 {
 			return map[string]float64{"test-val": 90.0}
 		},
 		nil)
 
-	rt.metrics["test-val"] = make([]float64, 0, 45)
+	pt.metrics["test-val"] = make([]float64, 0, 45)
 	for i := 0; i < 15; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(rand.Intn(20)))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(rand.Intn(20)))
 	}
 	for i := 0; i < 15; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(90.0))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(90.0))
 	}
 
-	if rt.detectAnomaly() {
+	if pt.detectAnomaly() {
 		t.Error("Did detect anomaly")
 	}
 }
@@ -74,18 +74,18 @@ func TestDetectAnomalyFalse(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
-	rt := newReportTrigger(agent, 100, 100,
+	pt := newProfilerTrigger(agent, 100, 100,
 		func() map[string]float64 {
 			return map[string]float64{"test-val": 10.0}
 		},
 		nil)
 
-	rt.metrics["test-val"] = make([]float64, 0, 45)
+	pt.metrics["test-val"] = make([]float64, 0, 45)
 	for i := 0; i < 45; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(rand.Intn(20)))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(rand.Intn(20)))
 	}
 
-	if rt.detectAnomaly() {
+	if pt.detectAnomaly() {
 		t.Error("Did detect anomaly")
 	}
 }
@@ -96,7 +96,7 @@ func TestAnomalyReport(t *testing.T) {
 
 	reportCount := 0
 
-	rt := newReportTrigger(agent, 3, 100,
+	pt := newProfilerTrigger(agent, 3, 100,
 		func() map[string]float64 {
 			return map[string]float64{"test-val": 90.0}
 		},
@@ -107,15 +107,15 @@ func TestAnomalyReport(t *testing.T) {
 		},
 	)
 
-	rt.metrics["test-val"] = make([]float64, 0, 45)
+	pt.metrics["test-val"] = make([]float64, 0, 45)
 	for i := 0; i < 30; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(rand.Intn(20)))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(rand.Intn(20)))
 	}
 	for i := 0; i < 15; i++ {
-		rt.metrics["test-val"] = append(rt.metrics["test-val"], float64(90.0))
+		pt.metrics["test-val"] = append(pt.metrics["test-val"], float64(90.0))
 	}
 
-	rt.start()
+	pt.start()
 
 	testTimer := time.NewTimer(2 * time.Second)
 	done := make(chan bool)
@@ -126,7 +126,7 @@ func TestAnomalyReport(t *testing.T) {
 			t.Error("report func was not called")
 		}
 
-		if rt.lastReportTs == 0 {
+		if pt.lastTriggerTS == 0 {
 			t.Error("reportCounter is 0 after reporting")
 		}
 
@@ -140,7 +140,7 @@ func TestTimerReport(t *testing.T) {
 	agent.Debug = true
 
 	reportCount := 0
-	rt := newReportTrigger(agent, 1, 1,
+	pt := newProfilerTrigger(agent, 1, 1,
 		func() map[string]float64 {
 			return map[string]float64{"test-val": 20.0}
 		},
@@ -150,7 +150,7 @@ func TestTimerReport(t *testing.T) {
 			}
 		},
 	)
-	rt.start()
+	pt.start()
 
 	testTimer := time.NewTimer(3 * time.Second)
 	done := make(chan bool)

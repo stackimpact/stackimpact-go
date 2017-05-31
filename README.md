@@ -53,8 +53,7 @@ And import the package `github.com/stackimpact/stackimpact-go` in your applicati
 Start the agent by specifying the agent key and application name. The agent key can be found in your account's Configuration section.
 
 ```go
-agent := stackimpact.NewAgent();
-agent.Start(stackimpact.Options{
+agent := stackimpact.Start(stackimpact.Options{
 	AgentKey: "agent key here",
 	AppName: "MyGoApp",
 })
@@ -64,6 +63,7 @@ Other initialization options:
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
+* `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
 * `Debug` (Optional) Enables debug logging.
 
 
@@ -84,8 +84,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	agent := stackimpact.NewAgent()
-	agent.Start(stackimpact.Options{
+	agent := stackimpact.Start(stackimpact.Options{
 		AgentKey: "agent key here",
 		AppName: "Basic Go Server",
 		AppVersion: "1.0.0",

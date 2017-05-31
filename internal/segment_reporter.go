@@ -2,11 +2,11 @@ package internal
 
 import (
 	"sync"
+	"time"
 )
 
 type SegmentReporter struct {
 	agent            *Agent
-	reportTrigger    *ReportTrigger
 	segmentNodes     map[string]*BreakdownNode
 	segmentDurations map[string]*float64
 	recordLock       *sync.RWMutex
@@ -15,24 +15,26 @@ type SegmentReporter struct {
 func newSegmentReporter(agent *Agent) *SegmentReporter {
 	sr := &SegmentReporter{
 		agent:            agent,
-		reportTrigger:    nil,
 		segmentNodes:     make(map[string]*BreakdownNode),
 		segmentDurations: make(map[string]*float64),
 		recordLock:       &sync.RWMutex{},
 	}
 
-	sr.reportTrigger = newReportTrigger(agent, 60, 60, nil,
-		func(trigger string) {
-			sr.agent.log("Segment report triggered by reporting strategy, trigger=%v", trigger)
-			sr.report(trigger)
-		},
-	)
-
 	return sr
 }
 
 func (sr *SegmentReporter) start() {
-	sr.reportTrigger.start()
+	reportTicker := time.NewTicker(60 * time.Second)
+	go func() {
+		defer sr.agent.recoverAndLog()
+
+		for {
+			select {
+			case <-reportTicker.C:
+				sr.report()
+			}
+		}
+	}()
 }
 
 func (sr *SegmentReporter) recordSegment(name string, duration float64) {
@@ -81,7 +83,7 @@ func (sr *SegmentReporter) recordSegment(name string, duration float64) {
 	}
 }
 
-func (sr *SegmentReporter) report(trigger string) {
+func (sr *SegmentReporter) report() {
 	sr.recordLock.Lock()
 	outgoing := sr.segmentNodes
 	sr.segmentNodes = make(map[string]*BreakdownNode)
@@ -94,7 +96,7 @@ func (sr *SegmentReporter) report(trigger string) {
 		segmentRoot.propagate()
 
 		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentNode.name, UnitMillisecond)
-		metric.createMeasurement(trigger, segmentRoot.measurement, segmentRoot)
+		metric.createMeasurement(TriggerTimer, segmentRoot.measurement, segmentRoot)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }

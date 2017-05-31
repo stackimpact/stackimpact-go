@@ -20,19 +20,26 @@ func newProcessReporter(agent *Agent) *ProcessReporter {
 }
 
 func (pr *ProcessReporter) start() {
-	go pr.report()
 
-	collectTicker := time.NewTicker(1 * time.Minute)
-
+	delayTimer := time.NewTimer(5 * time.Second)
 	go func() {
 		defer pr.agent.recoverAndLog()
 
-		for {
-			select {
-			case <-collectTicker.C:
-				pr.report()
+		<-delayTimer.C
+
+		pr.report()
+
+		reportTicker := time.NewTicker(60 * time.Second)
+		go func() {
+			defer pr.agent.recoverAndLog()
+
+			for {
+				select {
+				case <-reportTicker.C:
+					pr.report()
+				}
 			}
-		}
+		}()
 	}()
 }
 

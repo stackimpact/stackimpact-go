@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"runtime"
 	"time"
 )
@@ -47,8 +48,8 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 	w.Write(reqBodyJson)
 	w.Close()
 
-	url := ar.agent.DashboardAddress + "/agent/v1/" + endpoint
-	req, err := http.NewRequest("POST", url, &buf)
+	u := ar.agent.DashboardAddress + "/agent/v1/" + endpoint
+	req, err := http.NewRequest("POST", u, &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +58,23 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
 
-	ar.agent.log("Posting API request to %v", url)
+	ar.agent.log("Posting API request to %v", u)
 
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
+	var httpClient *http.Client
+	if ar.agent.ProxyAddress != "" {
+		proxyURL, err := url.Parse(ar.agent.ProxyAddress)
+		if err != nil {
+			return nil, err
+		}
+
+		httpClient = &http.Client{
+			Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+			Timeout:   time.Second * 20,
+		}
+	} else {
+		httpClient = &http.Client{
+			Timeout: time.Second * 20,
+		}
 	}
 	res, err := httpClient.Do(req)
 	if err != nil {

@@ -13,6 +13,7 @@ const ErrorGroupHandledExceptions string = "Handled exceptions"
 
 type Options struct {
 	DashboardAddress string
+	ProxyAddress     string
 	AgentKey         string
 	AppName          string
 	AppVersion       string
@@ -32,7 +33,7 @@ type Agent struct {
 	Debug            bool
 }
 
-// Creates new agent instance.
+// DEPRECATED. Kept for compatibility with <1.4.3.
 func NewAgent() *Agent {
 	a := &Agent{
 		internalAgent: internal.NewAgent(),
@@ -41,8 +42,24 @@ func NewAgent() *Agent {
 	return a
 }
 
+// Agent instance
+var _agent *Agent = nil
+
 // Starts the agent with configuration options.
-// Agent should be started only once.
+// Required options are AgentKey and AppName.
+func Start(options Options) *Agent {
+	if _agent == nil {
+		_agent = &Agent{
+			internalAgent: internal.NewAgent(),
+		}
+	}
+
+	_agent.Start(options)
+
+	return _agent
+}
+
+// Starts the agent with configuration options.
 // Required options are AgentKey and AppName.
 func (a *Agent) Start(options Options) {
 	a.internalAgent.AgentKey = options.AgentKey
@@ -62,6 +79,10 @@ func (a *Agent) Start(options Options) {
 
 	if options.DashboardAddress != "" {
 		a.internalAgent.DashboardAddress = options.DashboardAddress
+	}
+
+	if options.ProxyAddress != "" {
+		a.internalAgent.ProxyAddress = options.ProxyAddress
 	}
 
 	if options.Debug {

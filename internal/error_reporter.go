@@ -4,35 +4,37 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 )
 
 type ErrorReporter struct {
-	agent         *Agent
-	reportTrigger *ReportTrigger
-	recordLock    *sync.RWMutex
-	errorGraphs   map[string]*BreakdownNode
+	agent       *Agent
+	recordLock  *sync.RWMutex
+	errorGraphs map[string]*BreakdownNode
 }
 
 func newErrorReporter(agent *Agent) *ErrorReporter {
 	er := &ErrorReporter{
-		agent:         agent,
-		reportTrigger: nil,
-		recordLock:    &sync.RWMutex{},
-		errorGraphs:   make(map[string]*BreakdownNode),
+		agent:       agent,
+		recordLock:  &sync.RWMutex{},
+		errorGraphs: make(map[string]*BreakdownNode),
 	}
-
-	er.reportTrigger = newReportTrigger(agent, 60, 60, nil,
-		func(trigger string) {
-			er.agent.log("Error report triggered by reporting strategy, trigger=%v", trigger)
-			er.report(trigger)
-		},
-	)
 
 	return er
 }
 
 func (er *ErrorReporter) start() {
-	er.reportTrigger.start()
+	reportTicker := time.NewTicker(60 * time.Second)
+	go func() {
+		defer er.agent.recoverAndLog()
+
+		for {
+			select {
+			case <-reportTicker.C:
+				er.report()
+			}
+		}
+	}()
 }
 
 func callerFrames(skip int) []string {
@@ -103,7 +105,7 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 	}
 }
 
-func (er *ErrorReporter) report(trigger string) {
+func (er *ErrorReporter) report() {
 	er.recordLock.Lock()
 	outgoing := er.errorGraphs
 	er.errorGraphs = make(map[string]*BreakdownNode)
@@ -111,7 +113,7 @@ func (er *ErrorReporter) report(trigger string) {
 
 	for _, errorGraph := range outgoing {
 		metric := newMetric(er.agent, TypeState, CategoryErrorProfile, errorGraph.name, UnitNone)
-		metric.createMeasurement(trigger, errorGraph.measurement, errorGraph)
+		metric.createMeasurement(TriggerTimer, errorGraph.measurement, errorGraph)
 		er.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }

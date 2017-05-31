@@ -20,7 +20,7 @@ func TestRecordSegment(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	segmentNodes := agent.segmentReporter.segmentNodes
-	agent.segmentReporter.report("timer")
+	agent.segmentReporter.report()
 
 	seg1Counter := segmentNodes["seg1"]
 	if seg1Counter.name != "seg1" || seg1Counter.measurement < 10 {

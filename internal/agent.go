@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.4.2"
+const AgentVersion = "1.4.3"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -35,11 +35,12 @@ type Agent struct {
 	errorReporter      *ErrorReporter
 
 	// Syncronization
-	profilingLock   *sync.RWMutex
-	profilingActive bool
+	profilerLock   *sync.RWMutex
+	profilerActive bool
 
 	// Options
 	DashboardAddress string
+	ProxyAddress     string
 	AgentKey         string
 	AppName          string
 	AppVersion       string
@@ -65,10 +66,11 @@ func NewAgent() *Agent {
 		segmentReporter:    nil,
 		errorReporter:      nil,
 
-		profilingLock:   &sync.RWMutex{},
-		profilingActive: false,
+		profilerLock:   &sync.RWMutex{},
+		profilerActive: false,
 
 		DashboardAddress: SAASDashboardAddress,
+		ProxyAddress:     "",
 		AgentKey:         "",
 		AppName:          "",
 		AppVersion:       "",
@@ -96,7 +98,6 @@ func NewAgent() *Agent {
 
 func (a *Agent) Start() {
 	if agentStarted {
-		a.log("Agent configuration failed. Another agent has already been initialized.")
 		return
 	}
 	agentStarted = true
@@ -164,11 +165,30 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	a.errorReporter.recordError(group, err, skipFrames+1)
 }
 
-func (a *Agent) isProfilingActive() bool {
-	a.profilingLock.RLock()
-	defer a.profilingLock.RUnlock()
+func (a *Agent) isProfilerActive() bool {
+	a.profilerLock.RLock()
+	defer a.profilerLock.RUnlock()
 
-	return a.profilingActive
+	return a.profilerActive
+}
+
+func (a *Agent) setProfilerActive() bool {
+	a.profilerLock.Lock()
+	defer a.profilerLock.Unlock()
+
+	if !a.profilerActive {
+		a.profilerActive = true
+		return true
+	} else {
+		return false
+	}
+}
+
+func (a *Agent) setProfilerInactive() {
+	a.profilerLock.Lock()
+	defer a.profilerLock.Unlock()
+
+	a.profilerActive = false
 }
 
 func (a *Agent) log(format string, values ...interface{}) {

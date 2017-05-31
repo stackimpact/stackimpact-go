@@ -24,17 +24,17 @@ type Record struct {
 }
 
 type BlockReporter struct {
-	agent         *Agent
-	reportTrigger *ReportTrigger
+	agent           *Agent
+	profilerTrigger *ProfilerTrigger
 }
 
 func newBlockReporter(agent *Agent) *BlockReporter {
 	br := &BlockReporter{
-		agent:         agent,
-		reportTrigger: nil,
+		agent:           agent,
+		profilerTrigger: nil,
 	}
 
-	br.reportTrigger = newReportTrigger(agent, 75, 300,
+	br.profilerTrigger = newProfilerTrigger(agent, 75, 300,
 		func() map[string]float64 {
 			metrics := map[string]float64{"num-goroutines": float64(runtime.NumGoroutine())}
 
@@ -55,7 +55,7 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 }
 
 func (br *BlockReporter) start() {
-	br.reportTrigger.start()
+	br.profilerTrigger.start()
 }
 
 func (br *BlockReporter) report(trigger string) {

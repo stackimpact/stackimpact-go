@@ -33,17 +33,17 @@ func readMemAlloc() float64 {
 }
 
 type AllocationReporter struct {
-	agent         *Agent
-	reportTrigger *ReportTrigger
+	agent           *Agent
+	profilerTrigger *ProfilerTrigger
 }
 
 func newAllocationReporter(agent *Agent) *AllocationReporter {
 	ar := &AllocationReporter{
-		agent:         agent,
-		reportTrigger: nil,
+		agent:           agent,
+		profilerTrigger: nil,
 	}
 
-	ar.reportTrigger = newReportTrigger(agent, 30, 300, nil,
+	ar.profilerTrigger = newProfilerTrigger(agent, 30, 300, nil,
 		func(trigger string) {
 			ar.agent.log("Allocation report triggered by reporting strategy, trigger=%v", trigger)
 			ar.report(trigger)
@@ -54,7 +54,7 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 }
 
 func (ar *AllocationReporter) start() {
-	ar.reportTrigger.start()
+	ar.profilerTrigger.start()
 }
 
 func (ar *AllocationReporter) report(trigger string) {
