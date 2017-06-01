@@ -83,6 +83,10 @@ func (pt *ProfilerTrigger) start() {
 }
 
 func (pt *ProfilerTrigger) detectAnomaly() bool {
+	if pt.agent.isProfilerActive() {
+		return false
+	}
+
 	lastValues := pt.metricFunc()
 
 	// Update metrics map with last values
