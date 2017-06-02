@@ -2,9 +2,9 @@
 
 ## Overview
 
-StackImpact is a performance profiling and monitoring service for production Go applications. It gives developers continuous visibility with line-of-code precision into application performance, such as CPU, memory and I/O hot spots as well execution bottlenecks, allowing developers to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
+StackImpact is a performance profiling and monitoring service for production applications. It gives developers continuous visibility with line-of-code precision into application performance, such as CPU, memory and I/O hot spots as well execution bottlenecks, allowing developers to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
 
-
+![dashboard](https://stackimpact.com/wp-content/uploads/2017/05/hotspots-cpu-1.4.png)
 
 #### Features
 
@@ -12,7 +12,7 @@ StackImpact is a performance profiling and monitoring service for production Go 
 * Automatic bottleneck tracing for HTTP handlers and HTTP clients.
 * Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
-* Alerts on hot spot anomalies.
+* Anomaly alerts on most important metrics.
 * Multiple account users for team collaboration.
 
 Learn more on the [features](https://stackimpact.com/features/) page (with screenshots).
