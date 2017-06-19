@@ -2,9 +2,9 @@
 
 ## Overview
 
-StackImpact is a performance profiling and monitoring service for production applications. It gives developers continuous visibility with line-of-code precision into application performance, such as CPU, memory and I/O hot spots as well execution bottlenecks, allowing developers to optimize applications and troubleshoot issues before they impact customers. Learn more at [stackimpact.com](https://stackimpact.com/).
+StackImpact is a performance profiler for production applications. It gives developers continuous and historical view of application performance with line-of-code precision, which includes CPU, memory allocation and blocking call hot spots as well as execution bottlenecks, errors and runtime metrics. Learn more at [stackimpact.com](https://stackimpact.com/).
 
-![dashboard](https://stackimpact.com/wp-content/uploads/2017/05/hotspots-cpu-1.4.png)
+![dashboard](https://stackimpact.com/wp-content/uploads/2017/06/hotspots-cpu-1.4.png)
 
 #### Features
 

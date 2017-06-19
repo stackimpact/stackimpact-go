@@ -22,13 +22,9 @@ const CategoryGC string = "gc"
 const CategoryRuntime string = "runtime"
 const CategoryCPUProfile string = "cpu-profile"
 const CategoryMemoryProfile string = "memory-profile"
-const CategoryChannelProfile string = "channel-profile"
-const CategoryNetworkProfile string = "network-profile"
-const CategorySystemProfile string = "system-profile"
+const CategoryBlockProfile string = "block-profile"
 const CategoryLockProfile string = "lock-profile"
-const CategoryHTTPHandlerTrace string = "http-trace"
-const CategoryHTTPClientTrace string = "http-client-trace"
-const CategoryDBClientTrace string = "db-client-trace"
+const CategoryHTTPTrace string = "http-trace"
 const CategorySegmentTrace string = "segment-trace"
 const CategoryErrorProfile string = "error-profile"
 
@@ -52,15 +48,8 @@ const NameGCTotalPause string = "GC total pause"
 const NameNumGC string = "Number of GCs"
 const NameGCCPUFraction string = "GC CPU fraction"
 const NameHeapAllocation string = "Heap allocation"
-const NameChannelWaitTime string = "Channel wait time"
-const NameNetworkWaitTime string = "Network wait time"
-const NameSystemWaitTime string = "System wait time"
-const NameLockWaitTime string = "Lock wait time"
-const NameHTTPTransactions string = "HTTP Transactions"
-const NameHTTPCalls string = "HTTP Calls"
-const NameSQLStatements string = "SQL Statements"
-const NameMongoDBCalls string = "MongoDB Calls"
-const NameRedisCalls string = "Redis Calls"
+const NameBlockingCallTimes string = "Blocking call times"
+const NameHTTPTransactionBreakdown string = "HTTP transaction breakdown"
 
 const UnitNone string = ""
 const UnitMillisecond string = "millisecond"
@@ -74,6 +63,8 @@ const TriggerTimer string = "timer"
 const TriggerAnomaly string = "anomaly"
 
 const ReservoirSize int = 1000
+
+type filterFuncType func(name string) bool
 
 type BreakdownNode struct {
 	name        string
@@ -172,6 +163,16 @@ func (bn *BreakdownNode) filterLevel(currentLevel int, fromLevel int, min float6
 	}
 }
 
+func (bn *BreakdownNode) filterByName(filterFunc filterFuncType) {
+	for key, child := range bn.children {
+		if filterFunc(child.name) {
+			child.filterByName(filterFunc)
+		} else {
+			delete(bn.children, key)
+		}
+	}
+}
+
 func (bn *BreakdownNode) depth() int {
 	max := 0
 	for _, child := range bn.children {
@@ -240,6 +241,25 @@ func (bn *BreakdownNode) evaluateP95() {
 	}
 }
 
+func (bn *BreakdownNode) convertToPercentage(total float64) {
+	bn.measurement = (bn.measurement / total) * 100.0
+	for _, child := range bn.children {
+		child.convertToPercentage(total)
+	}
+}
+
+func (bn *BreakdownNode) clone() *BreakdownNode {
+	cln := newBreakdownNode(bn.name)
+	cln.measurement = bn.measurement
+	cln.numSamples = bn.numSamples
+
+	for _, child := range bn.children {
+		cln.addChild(child.clone())
+	}
+
+	return cln
+}
+
 func (bn *BreakdownNode) toMap() map[string]interface{} {
 	childrenMap := make([]interface{}, 0)
 	for _, child := range bn.children {
@@ -275,6 +295,7 @@ type Measurement struct {
 	id        string
 	trigger   string
 	value     float64
+	duration  int64
 	breakdown *BreakdownNode
 	timestamp int64
 }
@@ -313,7 +334,7 @@ func (m *Metric) hasMeasurement() bool {
 	return m.measurement != nil
 }
 
-func (m *Metric) createMeasurement(trigger string, value float64, breakdown *BreakdownNode) {
+func (m *Metric) createMeasurement(trigger string, value float64, duration int64, breakdown *BreakdownNode) {
 	ready := true
 
 	if m.typ == TypeCounter {
@@ -333,6 +354,7 @@ func (m *Metric) createMeasurement(trigger string, value float64, breakdown *Bre
 			id:        m.agent.uuid(),
 			trigger:   trigger,
 			value:     value,
+			duration:  duration,
 			breakdown: breakdown,
 			timestamp: time.Now().Unix(),
 		}
@@ -351,6 +373,7 @@ func (m *Metric) toMap() map[string]interface{} {
 			"id":        m.measurement.id,
 			"trigger":   m.measurement.trigger,
 			"value":     m.measurement.value,
+			"duration":  m.measurement.duration,
 			"breakdown": breakdownMap,
 			"timestamp": m.measurement.timestamp,
 		}

@@ -9,7 +9,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
+	"strconv"
 	"time"
 )
 
@@ -34,6 +36,7 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 		"app_version":     ar.agent.AppVersion,
 		"app_environment": ar.agent.AppEnvironment,
 		"host_name":       ar.agent.HostName,
+		"process_id":      strconv.Itoa(os.Getpid()),
 		"build_id":        ar.agent.buildId,
 		"run_id":          ar.agent.runId,
 		"run_ts":          ar.agent.runTs,

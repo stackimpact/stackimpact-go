@@ -61,15 +61,27 @@ func callerFrames(skip int) []string {
 }
 
 func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode, err error, frames []string) {
-	errorGraph.increment(1, 0)
-
-	currentNode := errorGraph.findOrAddChild(err.Error())
+	currentNode := errorGraph
 	currentNode.increment(1, 0)
 	for i := len(frames) - 1; i >= 0; i-- {
 		f := frames[i]
 		currentNode = currentNode.findOrAddChild(f)
 		currentNode.increment(1, 0)
 	}
+
+	message := err.Error()
+	if message == "" {
+		message = "Undefined"
+	}
+	messageNode := currentNode.findChild(message)
+	if messageNode == nil {
+		if len(currentNode.children) < 5 {
+			messageNode = currentNode.findOrAddChild(message)
+		} else {
+			messageNode = currentNode.findOrAddChild("Other")
+		}
+	}
+	messageNode.increment(1, 0)
 }
 
 func (er *ErrorReporter) recordError(group string, err error, skip int) {
@@ -113,7 +125,7 @@ func (er *ErrorReporter) report() {
 
 	for _, errorGraph := range outgoing {
 		metric := newMetric(er.agent, TypeState, CategoryErrorProfile, errorGraph.name, UnitNone)
-		metric.createMeasurement(TriggerTimer, errorGraph.measurement, errorGraph)
+		metric.createMeasurement(TriggerTimer, errorGraph.measurement, 60, errorGraph)
 		er.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }

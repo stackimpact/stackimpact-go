@@ -2,6 +2,7 @@ package internal
 
 import (
 	"math"
+	"math/rand"
 	"sync/atomic"
 	"time"
 )
@@ -75,6 +76,10 @@ func (pt *ProfilerTrigger) start() {
 			for {
 				select {
 				case <-intervalTicker.C:
+					randomDelay := int(float64(pt.interval)*0.05) + 1
+					randomTimer := time.NewTimer(time.Duration(rand.Intn(randomDelay)) * time.Second)
+					<-randomTimer.C
+
 					go pt.executeReport(TriggerTimer)
 				}
 			}

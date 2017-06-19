@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -14,12 +13,7 @@ import (
 	"sync"
 	"time"
 
-	redigo "github.com/garyburd/redigo/redis"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/stackimpact/stackimpact-go"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	goredis "gopkg.in/redis.v5"
 )
 
 var agent *stackimpact.Agent
@@ -238,7 +232,7 @@ func simulateHandlerSegments() {
 func simulateErrors() {
 	go func() {
 		for {
-			agent.RecordError(errors.New("A handled exception"))
+			agent.RecordError(fmt.Sprintf("A handled exception %v", rand.Intn(10)))
 
 			time.Sleep(2 * time.Second)
 		}
@@ -246,7 +240,7 @@ func simulateErrors() {
 
 	go func() {
 		for {
-			agent.RecordError(errors.New("A handled exception"))
+			agent.RecordError(errors.New(fmt.Sprintf("A handled exception %v", rand.Intn(10))))
 
 			time.Sleep(10 * time.Second)
 		}
@@ -283,125 +277,6 @@ func simulateErrors() {
 
 }
 
-func simulateSQL() {
-	db, err := sql.Open("mysql", "test:test@/test")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer db.Close()
-
-	stmtIns, err := db.Prepare("INSERT INTO test_table VALUES( ?, ? )")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer stmtIns.Close()
-
-	stmtOut, err := db.Prepare("SELECT name FROM test_table WHERE id = ?")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer stmtOut.Close()
-
-	for {
-		_, err = db.Exec("DELETE FROM test_table")
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		for i := 1; i <= 25; i++ {
-			_, err = stmtIns.Exec(i, fmt.Sprintf("text%v", i))
-			if err != nil {
-				fmt.Println(err)
-			}
-		}
-
-		var text string
-
-		err = stmtOut.QueryRow(10).Scan(&text)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		time.Sleep(500 * time.Millisecond)
-	}
-}
-
-type TestDoc struct {
-	ID   string `bson:"id"`
-	Text string `bson:"text"`
-}
-
-func simulateMongo() {
-	session, err := mgo.Dial("mongodb://localhost")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer session.Close()
-
-	collection := session.DB("test").C("testcol")
-
-	for {
-		_, err = collection.RemoveAll(bson.M{})
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		_, err = collection.UpsertId("1", &TestDoc{"1", "text1"})
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		var testDocs []TestDoc
-		err := collection.Find(nil).All(&testDocs)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		time.Sleep(300 * time.Millisecond)
-	}
-}
-
-func simulateRedigo() {
-	client, err := redigo.Dial("tcp", "localhost:6379")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-
-	for {
-		client.Do("SET", "key1", "1")
-		client.Do("GET", "key1")
-		client.Send("SET", "key1", "2")
-		client.Send("GET", "key1")
-		client.Flush()
-		client.Receive()
-		client.Receive()
-
-		time.Sleep(400 * time.Millisecond)
-	}
-}
-
-func simulateGoredis() {
-	client := goredis.NewClient(&goredis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	for {
-		client.Set("key1", "1", 0).Err()
-
-		pipe := client.Pipeline()
-		pipe.Incr("key1")
-		pipe.Exec()
-
-		txPipe := client.TxPipeline()
-		txPipe.Get("key1")
-		txPipe.Exec()
-
-		time.Sleep(400 * time.Millisecond)
-	}
-}
 
 func main() {
 	// StackImpact initialization
@@ -423,10 +298,6 @@ func main() {
 	go simulateSegments()
 	go simulateHandlerSegments()
 	go simulateErrors()
-	//go simulateSQL()
-	go simulateMongo()
-	go simulateRedigo()
-	go simulateGoredis()
 
 	select {}
 }

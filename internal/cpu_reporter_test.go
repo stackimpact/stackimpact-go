@@ -10,6 +10,7 @@ import (
 func TestCreateCallGraph(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
+	agent.ProfileAgent = true
 
 	done := make(chan bool)
 

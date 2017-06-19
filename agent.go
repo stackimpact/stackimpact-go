@@ -20,6 +20,7 @@ type Options struct {
 	AppEnvironment   string
 	HostName         string
 	Debug            bool
+	ProfileAgent     bool
 }
 
 type Agent struct {
@@ -87,6 +88,10 @@ func (a *Agent) Start(options Options) {
 
 	if options.Debug {
 		a.internalAgent.Debug = options.Debug
+	}
+
+	if options.ProfileAgent {
+		a.internalAgent.ProfileAgent = options.ProfileAgent
 	}
 
 	a.internalAgent.Start()

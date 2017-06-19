@@ -53,7 +53,7 @@ func (pr *ProcessReporter) reportMetric(typ string, category string, name string
 		metric = existingMetric
 	}
 
-	metric.createMeasurement(TriggerTimer, value, nil)
+	metric.createMeasurement(TriggerTimer, value, 0, nil)
 
 	if metric.hasMeasurement() {
 		pr.agent.messageQueue.addMessage("metric", metric.toMap())

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "1.4.4"
+const AgentVersion = "2.0.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -47,6 +47,7 @@ type Agent struct {
 	AppEnvironment   string
 	HostName         string
 	Debug            bool
+	ProfileAgent     bool
 }
 
 func NewAgent() *Agent {
@@ -77,6 +78,7 @@ func NewAgent() *Agent {
 		AppEnvironment:   "",
 		HostName:         "",
 		Debug:            false,
+		ProfileAgent:     false,
 	}
 
 	a.buildId = a.calculateProgramSHA1()

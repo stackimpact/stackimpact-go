@@ -43,7 +43,7 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 		profilerTrigger: nil,
 	}
 
-	ar.profilerTrigger = newProfilerTrigger(agent, 30, 300, nil,
+	ar.profilerTrigger = newProfilerTrigger(agent, 45, 300, nil,
 		func(trigger string) {
 			ar.agent.log("Allocation report triggered by reporting strategy, trigger=%v", trigger)
 			ar.report(trigger)
@@ -81,7 +81,7 @@ func (ar *AllocationReporter) report(trigger string) {
 		callGraph.filter(2, 10000, math.Inf(0))
 
 		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameHeapAllocation, UnitByte)
-		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		metric.createMeasurement(trigger, callGraph.measurement, 0, callGraph)
 		ar.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }
@@ -113,9 +113,7 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 	rootNode := newBreakdownNode("root")
 
 	for _, s := range p.Sample {
-		l := len(s.Value)
-		if inuseSpaceTypeIndex >= l || inuseObjectsTypeIndex >= l {
-			ar.agent.log("Possible inconsistence in profile types and measurements")
+		if !ar.agent.ProfileAgent && isAgentStack(s) {
 			continue
 		}
 

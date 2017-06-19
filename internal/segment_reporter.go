@@ -96,7 +96,7 @@ func (sr *SegmentReporter) report() {
 		segmentRoot.propagate()
 
 		metric := newMetric(sr.agent, TypeTrace, CategorySegmentTrace, segmentNode.name, UnitMillisecond)
-		metric.createMeasurement(TriggerTimer, segmentRoot.measurement, segmentRoot)
+		metric.createMeasurement(TriggerTimer, segmentRoot.measurement, 60, segmentRoot)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }

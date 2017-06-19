@@ -11,19 +11,19 @@ func TestCreateMeasurement(t *testing.T) {
 
 	m := newMetric(agent, TypeCounter, CategoryCPU, NameCPUUsage, UnitNone)
 
-	m.createMeasurement(TriggerTimer, 100, nil)
+	m.createMeasurement(TriggerTimer, 100, 0, nil)
 
 	if m.hasMeasurement() {
 		t.Errorf("Should not have measurement")
 	}
 
-	m.createMeasurement(TriggerTimer, 110, nil)
+	m.createMeasurement(TriggerTimer, 110, 0, nil)
 
 	if m.measurement.value != 10 {
 		t.Errorf("Value should be 10, but is %v", m.measurement.value)
 	}
 
-	m.createMeasurement(TriggerTimer, 115, nil)
+	m.createMeasurement(TriggerTimer, 115, 0, nil)
 
 	if m.measurement.value != 5 {
 		t.Errorf("Value should be 5, but is %v", m.measurement.value)

@@ -12,6 +12,7 @@ var objs []string
 func TestCreateAllocationCallGraph(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
+	agent.ProfileAgent = true
 
 	objs = make([]string, 0)
 	for i := 0; i < 100000; i++ {

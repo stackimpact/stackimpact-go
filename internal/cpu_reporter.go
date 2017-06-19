@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strings"
 	"time"
 
 	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
@@ -24,7 +26,7 @@ func newCPUReporter(agent *Agent) *CPUReporter {
 	}
 
 	baseCpuTime, _ := readCPUTime()
-	cr.profilerTrigger = newProfilerTrigger(agent, 45, 300,
+	cr.profilerTrigger = newProfilerTrigger(agent, 15, 300,
 		func() map[string]float64 {
 			cpuTime, _ := readCPUTime()
 			cpuUsage := float64(cpuTime - baseCpuTime)
@@ -67,7 +69,7 @@ func (cr *CPUReporter) report(trigger string) {
 		callGraph.filter(2, 1, 100)
 
 		metric := newMetric(cr.agent, TypeProfile, CategoryCPUProfile, NameCPUUsage, UnitPercent)
-		metric.createMeasurement(trigger, callGraph.measurement, callGraph)
+		metric.createMeasurement(trigger, callGraph.measurement, 0, callGraph)
 		cr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }
@@ -99,8 +101,7 @@ func (cr *CPUReporter) createCPUCallGraph(p *profile.Profile) (*BreakdownNode, e
 	rootNode := newBreakdownNode("root")
 
 	for _, s := range p.Sample {
-		if len(s.Value) <= typeIndex {
-			cr.agent.log("Possible inconsistence in profile types and measurements")
+		if !cr.agent.ProfileAgent && isAgentStack(s) {
 			continue
 		}
 
@@ -213,6 +214,26 @@ func symbolizeProfile(p *profile.Profile) error {
 	}
 
 	return nil
+}
+
+var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go", "internal")
+
+func isAgentStack(sample *profile.Sample) bool {
+	return stackContains(sample, "", "github.com/stackimpact/stackimpact-go/internal/")
+}
+
+func stackContains(sample *profile.Sample, funcNameTest string, fileNameTest string) bool {
+	for i := len(sample.Location) - 1; i >= 0; i-- {
+		l := sample.Location[i]
+		funcName, fileName, _ := readFuncInfo(l)
+
+		if (funcNameTest == "" || strings.Contains(funcName, funcNameTest)) &&
+			(fileNameTest == "" || strings.Contains(fileName, fileNameTest)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func readFuncInfo(l *profile.Location) (funcName string, fileName string, fileLine int64) {
