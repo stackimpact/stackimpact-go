@@ -33,20 +33,19 @@ func readMemAlloc() float64 {
 }
 
 type AllocationReporter struct {
-	agent           *Agent
-	profilerTrigger *ProfilerTrigger
+	agent             *Agent
+	profilerScheduler *ProfilerScheduler
 }
 
 func newAllocationReporter(agent *Agent) *AllocationReporter {
 	ar := &AllocationReporter{
-		agent:           agent,
-		profilerTrigger: nil,
+		agent:             agent,
+		profilerScheduler: nil,
 	}
 
-	ar.profilerTrigger = newProfilerTrigger(agent, 45, 300, nil,
-		func(trigger string) {
-			ar.agent.log("Allocation report triggered by reporting strategy, trigger=%v", trigger)
-			ar.report(trigger)
+	ar.profilerScheduler = newProfilerScheduler(agent, 0, 0, 120000, nil,
+		func() {
+			ar.report()
 		},
 	)
 
@@ -54,10 +53,10 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 }
 
 func (ar *AllocationReporter) start() {
-	ar.profilerTrigger.start()
+	ar.profilerScheduler.start()
 }
 
-func (ar *AllocationReporter) report(trigger string) {
+func (ar *AllocationReporter) report() {
 	if ar.agent.config.isProfilingDisabled() {
 		return
 	}
@@ -81,7 +80,7 @@ func (ar *AllocationReporter) report(trigger string) {
 		callGraph.filter(2, 10000, math.Inf(0))
 
 		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameHeapAllocation, UnitByte)
-		metric.createMeasurement(trigger, callGraph.measurement, 0, callGraph)
+		metric.createMeasurement(TriggerTimer, callGraph.measurement, 0, callGraph)
 		ar.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 }

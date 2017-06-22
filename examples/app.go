@@ -97,7 +97,7 @@ func simulateChannelWait() {
 
 		<-done
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
@@ -108,7 +108,7 @@ func simulateNetworkWait() {
 			done := make(chan bool)
 
 			go func() {
-				time.Sleep(time.Duration(rand.Intn(400)) * time.Millisecond)
+				time.Sleep(time.Duration(200 + rand.Intn(5)) * time.Millisecond)
 				done <- true
 			}()
 			<-done
@@ -212,7 +212,7 @@ func simulateHandlerSegments() {
 		}
 	}()
 
-	requestTicker := time.NewTicker(100 * time.Millisecond)
+	requestTicker := time.NewTicker(1000 * time.Millisecond)
 	for {
 		select {
 		case <-requestTicker.C:
@@ -285,7 +285,7 @@ func main() {
 		AppName:          "ExampleGoApp",
 		AppVersion:       "1.0.0",
 		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // test only
-		Debug:            true,
+		Debug:            false,
 	})
 	// end StackImpact initialization
 

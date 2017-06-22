@@ -9,7 +9,7 @@ StackImpact is a performance profiler for production applications. It gives deve
 #### Features
 
 * Automatic hot spot profiling for CPU, memory allocations, network, system calls and lock contention.
-* Automatic bottleneck tracing for HTTP handlers and HTTP clients.
+* Automatic bottleneck tracing for HTTP handlers.
 * Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
 * Anomaly alerts on most important metrics.
@@ -102,7 +102,7 @@ func main() {
 
 *The use of Segment API is optional.*
 
-To measure the execution time of arbitrary parts of the application, the Segment API can be used. The agent continuously watches segment execution time and initiates profiling when anomalies are detected.
+To measure the execution time of arbitrary parts of the application, the Segment API can be used.
 
 ```go
 // Starts measurement of execution time of a code segment.
@@ -161,7 +161,7 @@ defer agent.RecordAndRecoverPanic()
 
 #### Analyzing performance data in the Dashboard
 
-Once your application is restarted, you can start observing regular and anomaly-triggered CPU, memory, I/O, and other hot spot profiles, execution bottlenecks as well as process metrics in the [Dashboard](https://dashboard.stackimpact.com/).
+Once your application is restarted, you can start observing continuously recorded CPU, memory, I/O, and other hot spot profiles, execution bottlenecks as well as process metrics in the [Dashboard](https://dashboard.stackimpact.com/).
 
 
 #### Troubleshooting

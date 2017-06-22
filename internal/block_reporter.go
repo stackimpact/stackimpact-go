@@ -19,32 +19,30 @@ type BlockValues struct {
 }
 
 type BlockReporter struct {
-	agent           *Agent
-	profilerTrigger *ProfilerTrigger
-	prevValues      map[string]*BlockValues
+	agent             *Agent
+	profilerScheduler *ProfilerScheduler
+	prevValues        map[string]*BlockValues
+	blockProfile      *BreakdownNode
+	httpProfile       *BreakdownNode
+	profileDuration   int64
 }
 
 func newBlockReporter(agent *Agent) *BlockReporter {
 	br := &BlockReporter{
-		agent:           agent,
-		profilerTrigger: nil,
-		prevValues:      make(map[string]*BlockValues),
+		agent:             agent,
+		profilerScheduler: nil,
+		prevValues:        make(map[string]*BlockValues),
+		blockProfile:      nil,
+		httpProfile:       nil,
+		profileDuration:   0,
 	}
 
-	br.profilerTrigger = newProfilerTrigger(agent, 75, 300,
-		func() map[string]float64 {
-			metrics := map[string]float64{"num-goroutines": float64(runtime.NumGoroutine())}
-
-			segmentDurations := br.agent.segmentReporter.readLastDurations()
-			for name, duration := range segmentDurations {
-				metrics[name] = duration
-			}
-
-			return metrics
+	br.profilerScheduler = newProfilerScheduler(agent, 10000, 2000, 120000,
+		func(duration int64) {
+			br.record(duration)
 		},
-		func(trigger string) {
-			br.agent.log("Trace report triggered by reporting strategy, trigger=%v", trigger)
-			br.report(trigger)
+		func() {
+			br.report()
 		},
 	)
 
@@ -52,17 +50,22 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 }
 
 func (br *BlockReporter) start() {
-	br.profilerTrigger.start()
+	br.reset()
+	br.profilerScheduler.start()
 }
 
-func (br *BlockReporter) report(trigger string) {
+func (br *BlockReporter) reset() {
+	br.blockProfile = newBreakdownNode("root")
+	br.httpProfile = newBreakdownNode("root")
+	br.profileDuration = 0
+}
+
+func (br *BlockReporter) record(duration int64) {
 	if br.agent.config.isProfilingDisabled() {
 		return
 	}
 
-	duration := int64(5000)
-
-	br.agent.log("Starting block profiler for %v milliseconds...", duration)
+	br.agent.log("Starting block profiler.")
 	p, e := br.readBlockProfile(duration)
 	if e != nil {
 		br.agent.error(e)
@@ -71,31 +74,41 @@ func (br *BlockReporter) report(trigger string) {
 	if p == nil {
 		return
 	}
-	br.agent.log("block profiler stopped.")
+	br.agent.log("Block profiler stopped.")
 
-	blockCallGraph, httpCallGraph, err := br.createBlockCallGraph(p, duration)
+	err := br.updateBlockProfile(p, duration)
 	if err != nil {
 		br.agent.error(err)
 		return
 	}
 
-	blockCallGraph.filter(2, 1, math.Inf(0))
-
-	metric := newMetric(br.agent, TypeProfile, CategoryBlockProfile, NameBlockingCallTimes, UnitMillisecond)
-	metric.createMeasurement(trigger, blockCallGraph.measurement, 1, blockCallGraph)
-	br.agent.messageQueue.addMessage("metric", metric.toMap())
-
-	if blockCallGraph.measurement > 0 && httpCallGraph.numSamples > 0 {
-		httpCallGraph.convertToPercentage(blockCallGraph.measurement)
-		httpCallGraph.filter(2, 1, 100)
-
-		metric := newMetric(br.agent, TypeProfile, CategoryHTTPTrace, NameHTTPTransactionBreakdown, UnitPercent)
-		metric.createMeasurement(trigger, httpCallGraph.measurement, 0, httpCallGraph)
-		br.agent.messageQueue.addMessage("metric", metric.toMap())
-	}
+	br.profileDuration += duration
 }
 
-func (br *BlockReporter) createBlockCallGraph(p *profile.Profile, duration int64) (*BreakdownNode, *BreakdownNode, error) {
+func (br *BlockReporter) report() {
+	durationSec := float64(br.profileDuration) / 1000
+
+	br.blockProfile.normalize(durationSec)
+	br.blockProfile.filter(2, 1, math.Inf(0))
+
+	metric := newMetric(br.agent, TypeProfile, CategoryBlockProfile, NameBlockingCallTimes, UnitMillisecond)
+	metric.createMeasurement(TriggerTimer, br.blockProfile.measurement, 1, br.blockProfile)
+	br.agent.messageQueue.addMessage("metric", metric.toMap())
+
+	if br.blockProfile.measurement > 0 && br.httpProfile.numSamples > 0 {
+		br.httpProfile.normalize(durationSec)
+		br.httpProfile.convertToPercentage(br.blockProfile.measurement)
+		br.httpProfile.filter(2, 1, 100)
+
+		metric := newMetric(br.agent, TypeProfile, CategoryHTTPTrace, NameHTTPTransactionBreakdown, UnitPercent)
+		metric.createMeasurement(TriggerTimer, br.httpProfile.measurement, 0, br.httpProfile)
+		br.agent.messageQueue.addMessage("metric", metric.toMap())
+	}
+
+	br.reset()
+}
+
+func (br *BlockReporter) updateBlockProfile(p *profile.Profile, duration int64) error {
 	contentionIndex := -1
 	delayIndex := -1
 	for i, s := range p.SampleType {
@@ -107,14 +120,8 @@ func (br *BlockReporter) createBlockCallGraph(p *profile.Profile, duration int64
 	}
 
 	if contentionIndex == -1 || delayIndex == -1 {
-		return nil, nil, errors.New("Unrecognized profile data")
+		return errors.New("Unrecognized profile data")
 	}
-
-	durationSec := float64(duration) / 1000.0
-
-	// build call graphs
-	blockRootNode := newBreakdownNode("root")
-	httpRootNode := newBreakdownNode("root")
 
 	for _, s := range p.Sample {
 		if !br.agent.ProfileAgent && isAgentStack(s) {
@@ -133,13 +140,12 @@ func (br *BlockReporter) createBlockCallGraph(p *profile.Profile, duration int64
 			continue
 		}
 
-		// scale to milliseconds per second
-		contentions = int64(math.Ceil(float64(contentions) / durationSec))
-		delay = (delay / 1e6) / durationSec
+		// to milliseconds
+		delay = delay / 1e6
 
-		blockRootNode.increment(delay, contentions)
+		br.blockProfile.increment(delay, contentions)
 
-		currentNode := blockRootNode
+		currentNode := br.blockProfile
 		for i := len(s.Location) - 1; i >= 0; i-- {
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
@@ -154,9 +160,9 @@ func (br *BlockReporter) createBlockCallGraph(p *profile.Profile, duration int64
 		}
 
 		if isHTTPStack {
-			httpRootNode.increment(delay, contentions)
+			br.httpProfile.increment(delay, contentions)
 
-			currentNode := httpRootNode
+			currentNode := br.httpProfile
 			for i := len(s.Location) - 1; i >= 0; i-- {
 				l := s.Location[i]
 				funcName, fileName, fileLine := readFuncInfo(l)
@@ -172,13 +178,13 @@ func (br *BlockReporter) createBlockCallGraph(p *profile.Profile, duration int64
 		}
 	}
 
-	return blockRootNode, httpRootNode, nil
+	return nil
 }
 
 func generateValueKey(s *profile.Sample) string {
 	key := ""
 	for _, l := range s.Location {
-		key += fmt.Sprintf("%v:", l.ID)
+		key += fmt.Sprintf("%v:", l.Address)
 	}
 
 	return key

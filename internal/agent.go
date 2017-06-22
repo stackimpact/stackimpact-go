@@ -13,16 +13,17 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.0.0"
+const AgentVersion = "2.0.1"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
 
 type Agent struct {
-	nextId             int64
-	buildId            string
-	runId              string
-	runTs              int64
+	nextId  int64
+	buildId string
+	runId   string
+	runTs   int64
+
 	apiRequest         *APIRequest
 	config             *Config
 	configLoader       *ConfigLoader
@@ -34,9 +35,7 @@ type Agent struct {
 	segmentReporter    *SegmentReporter
 	errorReporter      *ErrorReporter
 
-	// Syncronization
-	profilerLock   *sync.RWMutex
-	profilerActive bool
+	profilerLock *sync.Mutex
 
 	// Options
 	DashboardAddress string
@@ -52,10 +51,11 @@ type Agent struct {
 
 func NewAgent() *Agent {
 	a := &Agent{
-		nextId:             0,
-		runId:              "",
-		buildId:            "",
-		runTs:              time.Now().Unix(),
+		nextId:  0,
+		runId:   "",
+		buildId: "",
+		runTs:   time.Now().Unix(),
+
 		apiRequest:         nil,
 		config:             nil,
 		configLoader:       nil,
@@ -67,8 +67,7 @@ func NewAgent() *Agent {
 		segmentReporter:    nil,
 		errorReporter:      nil,
 
-		profilerLock:   &sync.RWMutex{},
-		profilerActive: false,
+		profilerLock: &sync.Mutex{},
 
 		DashboardAddress: SAASDashboardAddress,
 		ProxyAddress:     "",
@@ -165,32 +164,6 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	}
 
 	a.errorReporter.recordError(group, err, skipFrames+1)
-}
-
-func (a *Agent) isProfilerActive() bool {
-	a.profilerLock.RLock()
-	defer a.profilerLock.RUnlock()
-
-	return a.profilerActive
-}
-
-func (a *Agent) setProfilerActive() bool {
-	a.profilerLock.Lock()
-	defer a.profilerLock.Unlock()
-
-	if !a.profilerActive {
-		a.profilerActive = true
-		return true
-	} else {
-		return false
-	}
-}
-
-func (a *Agent) setProfilerInactive() {
-	a.profilerLock.Lock()
-	defer a.profilerLock.Unlock()
-
-	a.profilerActive = false
 }
 
 func (a *Agent) log(format string, values ...interface{}) {

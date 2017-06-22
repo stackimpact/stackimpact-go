@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-var verbose bool = false
-
 func TestCreateBlockCallGraph(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
@@ -34,14 +32,18 @@ func TestCreateBlockCallGraph(t *testing.T) {
 		done <- true
 	}()
 
+	agent.blockReporter.reset()
 	p, _ := agent.blockReporter.readBlockProfile(500)
-	blockCallGraph, _, err := agent.blockReporter.createBlockCallGraph(p, 500)
+	err := agent.blockReporter.updateBlockProfile(p, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	if verbose {
+	blockCallGraph := agent.blockReporter.blockProfile
+	blockCallGraph.normalize(0.5)
+
+	if false {
 		fmt.Printf("WAIT TIME: %v\n", blockCallGraph.measurement)
 		fmt.Printf("CALL GRAPH: %v\n", blockCallGraph.printLevel(0))
 	}
@@ -84,18 +86,18 @@ func TestCreateHTTPCallGraph(t *testing.T) {
 			fmt.Fprintf(w, "OK")
 		})
 
-		if err := http.ListenAndServe(":5001", nil); err != nil {
+		if err := http.ListenAndServe(":6001", nil); err != nil {
 			t.Error(err)
 			return
 		}
 	}()
 
-	waitForServer("http://localhost:5001/ready")
+	waitForServer("http://localhost:6001/ready")
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 
-		res, err := http.Get("http://localhost:5001/test")
+		res, err := http.Get("http://localhost:6001/test")
 		if err != nil {
 			t.Error(err)
 		} else {
@@ -103,16 +105,23 @@ func TestCreateHTTPCallGraph(t *testing.T) {
 		}
 	}()
 
+	agent.blockReporter.reset()
 	p, _ := agent.blockReporter.readBlockProfile(500)
-	blockCallGraph, httpCallGraph, err := agent.blockReporter.createBlockCallGraph(p, 500)
+	err := agent.blockReporter.updateBlockProfile(p, 500)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
+	blockCallGraph := agent.blockReporter.blockProfile
+	blockCallGraph.normalize(0.5)
+
+	httpCallGraph := agent.blockReporter.httpProfile
+
+	httpCallGraph.normalize(0.5)
 	httpCallGraph.convertToPercentage(blockCallGraph.measurement)
 
-	if verbose {
+	if false {
 		fmt.Printf("PERCENT: %v\n", httpCallGraph.measurement)
 		fmt.Printf("CALL GRAPH: %v\n", httpCallGraph.printLevel(0))
 	}

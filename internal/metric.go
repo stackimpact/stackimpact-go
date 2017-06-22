@@ -248,6 +248,14 @@ func (bn *BreakdownNode) convertToPercentage(total float64) {
 	}
 }
 
+func (bn *BreakdownNode) normalize(factor float64) {
+	bn.measurement = bn.measurement / factor
+	bn.numSamples = int64(math.Ceil(float64(bn.numSamples) / factor))
+	for _, child := range bn.children {
+		child.normalize(factor)
+	}
+}
+
 func (bn *BreakdownNode) clone() *BreakdownNode {
 	cln := newBreakdownNode(bn.name)
 	cln.measurement = bn.measurement
@@ -283,7 +291,7 @@ func (bn *BreakdownNode) printLevel(level int) string {
 		str += "  "
 	}
 
-	str += fmt.Sprintf("%v - %v\n", bn.name, bn.measurement)
+	str += fmt.Sprintf("%v - %v (%v)\n", bn.name, bn.measurement, bn.numSamples)
 	for _, child := range bn.children {
 		str += child.printLevel(level + 1)
 	}

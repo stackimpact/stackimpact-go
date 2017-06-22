@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,15 +28,21 @@ func TestCreateCallGraph(t *testing.T) {
 		done <- true
 	}()
 
+	agent.cpuReporter.reset()
 	p, _ := agent.cpuReporter.readCPUProfile(1000)
 	//fmt.Printf("PROFILE: %v\n", p.String())
-	callGraph, err := agent.cpuReporter.createCPUCallGraph(p)
+	err := agent.cpuReporter.updateCPUProfile(p)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	//fmt.Printf("CPU USAGE: %v\n", callGraph.measurement)
-	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	callGraph := agent.cpuReporter.profile
+	callGraph.convertToPercentage(float64(1000 * 1e6 * runtime.NumCPU()))
+
+	if false {
+		fmt.Printf("CPU USAGE: %v\n", callGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
+	}
 	if callGraph.measurement < 2 {
 		t.Errorf("CPU usage is too low: %v", callGraph.measurement)
 	}
