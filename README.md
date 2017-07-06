@@ -34,7 +34,7 @@ Linux, OS X or Windows. Go version 1.5+.
 
 #### Create StackImpact account
 
-Sign up for a free account at [stackimpact.com](https://stackimpact.com/).
+[Sign up](https://dashboard.stackimpact.com/#/signup) for a free account (also with GitHub login).
 
 
 #### Installing the agent
@@ -60,6 +60,7 @@ agent := stackimpact.Start(stackimpact.Options{
 ```
 
 Other initialization options:
+
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
