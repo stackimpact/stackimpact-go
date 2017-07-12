@@ -59,8 +59,10 @@ agent := stackimpact.Start(stackimpact.Options{
 })
 ```
 
-Other initialization options:
+All initialization options:
 
+* `AgentKey` (Required) The access key for communication with the StackImpact servers.
+* `AppName` (Required) A name to identify and group application data. Typically, a single codebase corresponds to one application.
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
