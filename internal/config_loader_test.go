@@ -9,7 +9,7 @@ import (
 
 func TestConfigLoad(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "{\"profiling_disabled\":\"yes\"}")
+		fmt.Fprintf(w, "{\"agent_enabled\":\"yes\"}")
 	}))
 	defer server.Close()
 
@@ -20,9 +20,15 @@ func TestConfigLoad(t *testing.T) {
 	agent.Debug = true
 	agent.DashboardAddress = server.URL
 
+	agent.config.setAgentEnabled(false)
+
 	agent.configLoader.load()
 
-	if !agent.config.isProfilingDisabled() {
+	if !agent.config.isAgentEnabled() {
 		t.Errorf("Config loading wasn't successful")
+	}
+
+	if agent.cpuReporter.profile == nil {
+		t.Errorf("Did not call stop methods of reporters")
 	}
 }

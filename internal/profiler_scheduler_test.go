@@ -8,6 +8,7 @@ import (
 func TestTimerReport(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
+	agent.config.agentEnabled = true
 
 	recordCount := 0
 	reportCount := 0

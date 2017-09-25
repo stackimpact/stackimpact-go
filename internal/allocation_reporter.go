@@ -33,17 +33,21 @@ func readMemAlloc() float64 {
 }
 
 type AllocationReporter struct {
+	ReportInterval    int64
 	agent             *Agent
+	started           bool
 	profilerScheduler *ProfilerScheduler
 }
 
 func newAllocationReporter(agent *Agent) *AllocationReporter {
 	ar := &AllocationReporter{
+		ReportInterval:    120000,
 		agent:             agent,
+		started:           false,
 		profilerScheduler: nil,
 	}
 
-	ar.profilerScheduler = newProfilerScheduler(agent, 0, 0, 120000, nil,
+	ar.profilerScheduler = newProfilerScheduler(agent, 0, 0, ar.ReportInterval, nil,
 		func() {
 			ar.report()
 		},
@@ -53,14 +57,24 @@ func newAllocationReporter(agent *Agent) *AllocationReporter {
 }
 
 func (ar *AllocationReporter) start() {
+	if ar.started {
+		return
+	}
+	ar.started = true
+
 	ar.profilerScheduler.start()
 }
 
-func (ar *AllocationReporter) report() {
-	if ar.agent.config.isProfilingDisabled() {
+func (ar *AllocationReporter) stop() {
+	if !ar.started {
 		return
 	}
+	ar.started = false
 
+	ar.profilerScheduler.stop()
+}
+
+func (ar *AllocationReporter) report() {
 	ar.agent.log("Reading heap profile...")
 	p, e := ar.readHeapProfile()
 	if e != nil {
@@ -76,6 +90,7 @@ func (ar *AllocationReporter) report() {
 	if callGraph, err := ar.createAllocationCallGraph(p); err != nil {
 		ar.agent.error(err)
 	} else {
+		callGraph.propagate()
 		// filter calls with lower than 10KB
 		callGraph.filter(2, 10000, math.Inf(0))
 
@@ -121,7 +136,6 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 		if value == 0 {
 			continue
 		}
-		rootNode.increment(float64(value), int64(count))
 
 		currentNode := rootNode
 		for i := len(s.Location) - 1; i >= 0; i-- {
@@ -134,8 +148,8 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
-			currentNode.increment(float64(value), int64(count))
 		}
+		currentNode.increment(float64(value), int64(count))
 	}
 
 	return rootNode, nil

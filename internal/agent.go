@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.0.1"
+const AgentVersion = "2.1.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -113,12 +113,6 @@ func (a *Agent) Start() {
 
 	a.configLoader.start()
 	a.messageQueue.start()
-	a.processReporter.start()
-	a.cpuReporter.start()
-	a.allocationReporter.start()
-	a.blockReporter.start()
-	a.segmentReporter.start()
-	a.errorReporter.start()
 
 	a.log("Agent started.")
 

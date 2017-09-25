@@ -8,33 +8,55 @@ import (
 )
 
 type ErrorReporter struct {
-	agent       *Agent
-	recordLock  *sync.RWMutex
-	errorGraphs map[string]*BreakdownNode
+	agent        *Agent
+	started      bool
+	recordLock   *sync.RWMutex
+	errorGraphs  map[string]*BreakdownNode
+	reportTicker *time.Ticker
 }
 
 func newErrorReporter(agent *Agent) *ErrorReporter {
 	er := &ErrorReporter{
-		agent:       agent,
-		recordLock:  &sync.RWMutex{},
-		errorGraphs: make(map[string]*BreakdownNode),
+		agent:      agent,
+		started:    false,
+		recordLock: &sync.RWMutex{},
 	}
 
 	return er
 }
 
+func (er *ErrorReporter) reset() {
+	er.errorGraphs = make(map[string]*BreakdownNode)
+}
+
 func (er *ErrorReporter) start() {
-	reportTicker := time.NewTicker(60 * time.Second)
+	if er.started {
+		return
+	}
+	er.started = true
+
+	er.reset()
+
+	er.reportTicker = time.NewTicker(60 * time.Second)
 	go func() {
 		defer er.agent.recoverAndLog()
 
 		for {
 			select {
-			case <-reportTicker.C:
+			case <-er.reportTicker.C:
 				er.report()
 			}
 		}
 	}()
+}
+
+func (er *ErrorReporter) stop() {
+	if !er.started {
+		return
+	}
+	er.started = false
+
+	er.reportTicker.Stop()
 }
 
 func callerFrames(skip int) []string {
@@ -85,6 +107,10 @@ func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode,
 }
 
 func (er *ErrorReporter) recordError(group string, err error, skip int) {
+	if !er.started {
+		return
+	}
+
 	frames := callerFrames(skip + 1)
 
 	if err == nil {
@@ -118,6 +144,10 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 }
 
 func (er *ErrorReporter) report() {
+	if !er.agent.config.isAgentEnabled() {
+		return
+	}
+
 	er.recordLock.Lock()
 	outgoing := er.errorGraphs
 	er.errorGraphs = make(map[string]*BreakdownNode)

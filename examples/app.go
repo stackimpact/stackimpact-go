@@ -285,7 +285,7 @@ func main() {
 		AppName:          "ExampleGoApp",
 		AppVersion:       "1.0.0",
 		DashboardAddress: os.Getenv("DASHBOARD_ADDRESS"), // test only
-		Debug:            false,
+		Debug:            true,
 	})
 	// end StackImpact initialization
 

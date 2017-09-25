@@ -30,6 +30,7 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	callGraph.propagate()
 	//fmt.Printf("ALLOCATED SIZE: %f\n", callGraph.measurement)
 	//fmt.Printf("CALL GRAPH: %v\n", callGraph.printLevel(0))
 	if callGraph.measurement < 100000 {

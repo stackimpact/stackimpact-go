@@ -16,6 +16,8 @@ type ProfilerScheduler struct {
 	reportInterval int64
 	recordFunc     recordFuncType
 	reportFunc     reportFuncType
+	recordTicker   *time.Ticker
+	reportTicker   *time.Ticker
 }
 
 func newProfilerScheduler(
@@ -43,13 +45,13 @@ func (ps *ProfilerScheduler) start() {
 	if ps.recordFunc != nil {
 		maxDelay := int64(float64(ps.recordInterval - ps.recordDuration))
 
-		recordIntervalTicker := time.NewTicker(time.Duration(ps.recordInterval) * time.Millisecond)
+		ps.recordTicker = time.NewTicker(time.Duration(ps.recordInterval) * time.Millisecond)
 		go func() {
 			defer ps.agent.recoverAndLog()
 
 			for {
 				select {
-				case <-recordIntervalTicker.C:
+				case <-ps.recordTicker.C:
 					randomTimer := time.NewTimer(time.Duration(ps.randSource.Int63n(maxDelay)) * time.Millisecond)
 					<-randomTimer.C
 
@@ -59,17 +61,27 @@ func (ps *ProfilerScheduler) start() {
 		}()
 	}
 
-	reportIntervalTicker := time.NewTicker(time.Duration(ps.reportInterval) * time.Millisecond)
+	ps.reportTicker = time.NewTicker(time.Duration(ps.reportInterval) * time.Millisecond)
 	go func() {
 		defer ps.agent.recoverAndLog()
 
 		for {
 			select {
-			case <-reportIntervalTicker.C:
+			case <-ps.reportTicker.C:
 				go ps.executeReport()
 			}
 		}
 	}()
+}
+
+func (ps *ProfilerScheduler) stop() {
+	if ps.recordTicker != nil {
+		ps.recordTicker.Stop()
+	}
+
+	if ps.reportTicker != nil {
+		ps.reportTicker.Stop()
+	}
 }
 
 func (ps *ProfilerScheduler) executeRecord() {

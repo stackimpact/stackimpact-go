@@ -7,37 +7,65 @@ import (
 
 type SegmentReporter struct {
 	agent            *Agent
+	started          bool
 	segmentNodes     map[string]*BreakdownNode
 	segmentDurations map[string]*float64
 	recordLock       *sync.RWMutex
+	reportTicker     *time.Ticker
 }
 
 func newSegmentReporter(agent *Agent) *SegmentReporter {
 	sr := &SegmentReporter{
-		agent:            agent,
-		segmentNodes:     make(map[string]*BreakdownNode),
-		segmentDurations: make(map[string]*float64),
-		recordLock:       &sync.RWMutex{},
+		agent:      agent,
+		started:    false,
+		recordLock: &sync.RWMutex{},
 	}
 
 	return sr
 }
 
+func (sr *SegmentReporter) reset() {
+	sr.segmentNodes = make(map[string]*BreakdownNode)
+	sr.segmentDurations = make(map[string]*float64)
+}
+
 func (sr *SegmentReporter) start() {
-	reportTicker := time.NewTicker(60 * time.Second)
+	if sr.started {
+		return
+	}
+	sr.started = true
+
+	sr.reset()
+
+	sr.reportTicker = time.NewTicker(60 * time.Second)
 	go func() {
 		defer sr.agent.recoverAndLog()
 
 		for {
 			select {
-			case <-reportTicker.C:
-				sr.report()
+			case <-sr.reportTicker.C:
+				if sr.agent.config.isAgentEnabled() {
+					sr.report()
+				}
 			}
 		}
 	}()
 }
 
+func (sr *SegmentReporter) stop() {
+	if !sr.started {
+		return
+	}
+	sr.started = false
+
+	sr.reportTicker.Stop()
+}
+
 func (sr *SegmentReporter) recordSegment(name string, duration float64) {
+	if !sr.started {
+		return
+	}
+
 	if name == "" {
 		sr.agent.log("Empty segment name")
 		return

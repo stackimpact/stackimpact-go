@@ -37,6 +37,7 @@ func TestCreateCallGraph(t *testing.T) {
 		return
 	}
 	callGraph := agent.cpuReporter.profile
+	callGraph.propagate()
 	callGraph.convertToPercentage(float64(1000 * 1e6 * runtime.NumCPU()))
 
 	if false {

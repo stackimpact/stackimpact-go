@@ -10,6 +10,8 @@ func TestReport(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
+	agent.processReporter.reset()
+
 	agent.processReporter.report()
 	agent.processReporter.report()
 	agent.processReporter.report()

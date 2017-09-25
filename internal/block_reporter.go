@@ -19,25 +19,36 @@ type BlockValues struct {
 }
 
 type BlockReporter struct {
+	RecordInterval    int64
+	RecordDuration    int64
+	ReportInterval    int64
 	agent             *Agent
+	started           bool
 	profilerScheduler *ProfilerScheduler
 	prevValues        map[string]*BlockValues
 	blockProfile      *BreakdownNode
-	httpProfile       *BreakdownNode
+	blockTrace        *BreakdownNode
 	profileDuration   int64
 }
 
 func newBlockReporter(agent *Agent) *BlockReporter {
 	br := &BlockReporter{
+		RecordInterval:    20000,
+		RecordDuration:    4000,
+		ReportInterval:    120000,
 		agent:             agent,
+		started:           false,
 		profilerScheduler: nil,
 		prevValues:        make(map[string]*BlockValues),
 		blockProfile:      nil,
-		httpProfile:       nil,
+		blockTrace:        nil,
 		profileDuration:   0,
 	}
 
-	br.profilerScheduler = newProfilerScheduler(agent, 10000, 2000, 120000,
+	br.profilerScheduler = newProfilerScheduler(agent,
+		br.RecordInterval,
+		br.RecordDuration,
+		br.ReportInterval,
 		func(duration int64) {
 			br.record(duration)
 		},
@@ -50,21 +61,31 @@ func newBlockReporter(agent *Agent) *BlockReporter {
 }
 
 func (br *BlockReporter) start() {
+	if br.started {
+		return
+	}
+	br.started = true
+
 	br.reset()
 	br.profilerScheduler.start()
 }
 
+func (br *BlockReporter) stop() {
+	if !br.started {
+		return
+	}
+	br.started = false
+
+	br.profilerScheduler.stop()
+}
+
 func (br *BlockReporter) reset() {
 	br.blockProfile = newBreakdownNode("root")
-	br.httpProfile = newBreakdownNode("root")
+	br.blockTrace = newBreakdownNode("root")
 	br.profileDuration = 0
 }
 
 func (br *BlockReporter) record(duration int64) {
-	if br.agent.config.isProfilingDisabled() {
-		return
-	}
-
 	br.agent.log("Starting block profiler.")
 	p, e := br.readBlockProfile(duration)
 	if e != nil {
@@ -89,21 +110,21 @@ func (br *BlockReporter) report() {
 	durationSec := float64(br.profileDuration) / 1000
 
 	br.blockProfile.normalize(durationSec)
+	br.blockProfile.propagate()
 	br.blockProfile.filter(2, 1, math.Inf(0))
 
 	metric := newMetric(br.agent, TypeProfile, CategoryBlockProfile, NameBlockingCallTimes, UnitMillisecond)
 	metric.createMeasurement(TriggerTimer, br.blockProfile.measurement, 1, br.blockProfile)
 	br.agent.messageQueue.addMessage("metric", metric.toMap())
 
-	if br.blockProfile.measurement > 0 && br.httpProfile.numSamples > 0 {
-		br.httpProfile.normalize(durationSec)
-		br.httpProfile.convertToPercentage(br.blockProfile.measurement)
-		br.httpProfile.filter(2, 1, 100)
+	br.blockTrace.evaluateP95()
+	br.blockTrace.propagate()
+	br.blockTrace.round()
+	br.blockTrace.filter(2, 1, math.Inf(0))
 
-		metric := newMetric(br.agent, TypeProfile, CategoryHTTPTrace, NameHTTPTransactionBreakdown, UnitPercent)
-		metric.createMeasurement(TriggerTimer, br.httpProfile.measurement, 0, br.httpProfile)
-		br.agent.messageQueue.addMessage("metric", metric.toMap())
-	}
+	metric = newMetric(br.agent, TypeProfile, CategoryBlockTrace, NameBlockingCallTimes, UnitMillisecond)
+	metric.createMeasurement(TriggerTimer, br.blockTrace.measurement, 0, br.blockTrace)
+	br.agent.messageQueue.addMessage("metric", metric.toMap())
 
 	br.reset()
 }
@@ -128,8 +149,6 @@ func (br *BlockReporter) updateBlockProfile(p *profile.Profile, duration int64) 
 			continue
 		}
 
-		isHTTPStack := stackContains(s, ".ServeHTTP", "server.go")
-
 		delay := float64(s.Value[delayIndex])
 		contentions := s.Value[contentionIndex]
 
@@ -143,8 +162,6 @@ func (br *BlockReporter) updateBlockProfile(p *profile.Profile, duration int64) 
 		// to milliseconds
 		delay = delay / 1e6
 
-		br.blockProfile.increment(delay, contentions)
-
 		currentNode := br.blockProfile
 		for i := len(s.Location) - 1; i >= 0; i-- {
 			l := s.Location[i]
@@ -156,26 +173,22 @@ func (br *BlockReporter) updateBlockProfile(p *profile.Profile, duration int64) 
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
-			currentNode.increment(delay, contentions)
 		}
+		currentNode.increment(delay, contentions)
 
-		if isHTTPStack {
-			br.httpProfile.increment(delay, contentions)
+		currentNode = br.blockTrace
+		for i := len(s.Location) - 1; i >= 0; i-- {
+			l := s.Location[i]
+			funcName, fileName, fileLine := readFuncInfo(l)
 
-			currentNode := br.httpProfile
-			for i := len(s.Location) - 1; i >= 0; i-- {
-				l := s.Location[i]
-				funcName, fileName, fileLine := readFuncInfo(l)
-
-				if funcName == "runtime.goexit" {
-					continue
-				}
-
-				frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
-				currentNode = currentNode.findOrAddChild(frameName)
-				currentNode.increment(delay, contentions)
+			if funcName == "runtime.goexit" {
+				continue
 			}
+
+			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
+			currentNode = currentNode.findOrAddChild(frameName)
 		}
+		currentNode.updateP95(delay / float64(contentions))
 	}
 
 	return nil

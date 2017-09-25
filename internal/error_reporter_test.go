@@ -12,6 +12,9 @@ func TestRecordError(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
+	agent.errorReporter.reset()
+	agent.errorReporter.started = true
+
 	for i := 0; i < 100; i++ {
 		go func() {
 			agent.errorReporter.recordError("group1", errors.New("error1"), 0)

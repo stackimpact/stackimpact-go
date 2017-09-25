@@ -24,7 +24,7 @@ const CategoryCPUProfile string = "cpu-profile"
 const CategoryMemoryProfile string = "memory-profile"
 const CategoryBlockProfile string = "block-profile"
 const CategoryLockProfile string = "lock-profile"
-const CategoryHTTPTrace string = "http-trace"
+const CategoryBlockTrace string = "block-trace"
 const CategorySegmentTrace string = "segment-trace"
 const CategoryErrorProfile string = "error-profile"
 
@@ -254,6 +254,32 @@ func (bn *BreakdownNode) normalize(factor float64) {
 	for _, child := range bn.children {
 		child.normalize(factor)
 	}
+}
+
+func (bn *BreakdownNode) round() {
+	_, d := math.Modf(bn.measurement)
+	if d > 0.5 {
+		bn.measurement = math.Ceil(bn.measurement)
+	} else {
+		bn.measurement = math.Floor(bn.measurement)
+	}
+	for _, child := range bn.children {
+		child.round()
+	}
+}
+
+func round(val float64, roundOn float64, places int) float64 {
+	var round float64
+	pow := math.Pow(10, float64(places))
+	digit := pow * val
+	_, div := math.Modf(digit)
+	if div >= roundOn {
+		round = math.Ceil(digit)
+	} else {
+		round = math.Floor(digit)
+	}
+
+	return round / pow
 }
 
 func (bn *BreakdownNode) clone() *BreakdownNode {

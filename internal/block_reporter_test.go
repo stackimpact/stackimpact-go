@@ -17,12 +17,12 @@ func TestCreateBlockCallGraph(t *testing.T) {
 	done := make(chan bool)
 
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		wait := make(chan bool)
 
 		go func() {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 
 			wait <- true
 		}()
@@ -42,6 +42,7 @@ func TestCreateBlockCallGraph(t *testing.T) {
 
 	blockCallGraph := agent.blockReporter.blockProfile
 	blockCallGraph.normalize(0.5)
+	blockCallGraph.propagate()
 
 	if false {
 		fmt.Printf("WAIT TIME: %v\n", blockCallGraph.measurement)
@@ -61,7 +62,7 @@ func TestCreateBlockCallGraph(t *testing.T) {
 	<-done
 }
 
-func TestCreateHTTPCallGraph(t *testing.T) {
+func TestCreateBlockTraceCallGraph(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 	agent.ProfileAgent = true
@@ -113,26 +114,23 @@ func TestCreateHTTPCallGraph(t *testing.T) {
 		return
 	}
 
-	blockCallGraph := agent.blockReporter.blockProfile
-	blockCallGraph.normalize(0.5)
-
-	httpCallGraph := agent.blockReporter.httpProfile
-
-	httpCallGraph.normalize(0.5)
-	httpCallGraph.convertToPercentage(blockCallGraph.measurement)
+	blockTraceCallGraph := agent.blockReporter.blockTrace
+	blockTraceCallGraph.evaluateP95()
+	blockTraceCallGraph.propagate()
+	blockTraceCallGraph.round()
 
 	if false {
-		fmt.Printf("PERCENT: %v\n", httpCallGraph.measurement)
-		fmt.Printf("CALL GRAPH: %v\n", httpCallGraph.printLevel(0))
+		fmt.Printf("LATENCY: %v\n", blockTraceCallGraph.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", blockTraceCallGraph.printLevel(0))
 	}
-	if httpCallGraph.measurement < 5 {
-		t.Errorf("HTTP percentage is too low: %v", httpCallGraph.measurement)
+	if blockTraceCallGraph.measurement < 5 {
+		t.Errorf("Block trace value is too low: %v", blockTraceCallGraph.measurement)
 	}
-	if httpCallGraph.numSamples < 1 {
+	if blockTraceCallGraph.numSamples < 1 {
 		t.Error("Number of samples should be > 0")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", httpCallGraph.toMap()), "TestCreateHTTPCallGraph") {
+	if !strings.Contains(fmt.Sprintf("%v", blockTraceCallGraph.toMap()), "TestCreateBlockTraceCallGraph") {
 		t.Error("The test function is not found in the profile")
 	}
 }

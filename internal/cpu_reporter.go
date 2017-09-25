@@ -15,7 +15,11 @@ import (
 )
 
 type CPUReporter struct {
+	RecordInterval    int64
+	RecordDuration    int64
+	ReportInterval    int64
 	agent             *Agent
+	started           bool
 	profilerScheduler *ProfilerScheduler
 	profile           *BreakdownNode
 	profileDuration   int64
@@ -23,13 +27,20 @@ type CPUReporter struct {
 
 func newCPUReporter(agent *Agent) *CPUReporter {
 	cr := &CPUReporter{
+		RecordInterval:    10000,
+		RecordDuration:    2000,
+		ReportInterval:    120000,
 		agent:             agent,
+		started:           false,
 		profilerScheduler: nil,
 		profile:           nil,
 		profileDuration:   0,
 	}
 
-	cr.profilerScheduler = newProfilerScheduler(agent, 10000, 2000, 120000,
+	cr.profilerScheduler = newProfilerScheduler(agent,
+		cr.RecordInterval,
+		cr.RecordDuration,
+		cr.ReportInterval,
 		func(duration int64) {
 			cr.record(duration)
 		},
@@ -42,8 +53,22 @@ func newCPUReporter(agent *Agent) *CPUReporter {
 }
 
 func (cr *CPUReporter) start() {
+	if cr.started {
+		return
+	}
+	cr.started = true
+
 	cr.reset()
 	cr.profilerScheduler.start()
+}
+
+func (cr *CPUReporter) stop() {
+	if !cr.started {
+		return
+	}
+	cr.started = false
+
+	cr.profilerScheduler.stop()
 }
 
 func (cr *CPUReporter) reset() {
@@ -52,10 +77,6 @@ func (cr *CPUReporter) reset() {
 }
 
 func (cr *CPUReporter) record(duration int64) {
-	if cr.agent.config.isProfilingDisabled() {
-		return
-	}
-
 	cr.agent.log("Starting CPU profiler.")
 	p, e := cr.readCPUProfile(duration)
 	if e != nil {
@@ -75,12 +96,8 @@ func (cr *CPUReporter) record(duration int64) {
 }
 
 func (cr *CPUReporter) report() {
-	if cr.agent.config.isProfilingDisabled() {
-		return
-	}
-
 	cr.profile.convertToPercentage(float64(cr.profileDuration * 1e6 * int64(runtime.NumCPU())))
-
+	cr.profile.propagate()
 	// filter calls with lower than 1% CPU stake
 	cr.profile.filter(2, 1, 100)
 
@@ -115,8 +132,6 @@ func (cr *CPUReporter) updateCPUProfile(p *profile.Profile) error {
 		stackSamples := s.Value[samplesIndex]
 		stackDuration := float64(s.Value[cpuIndex])
 
-		cr.profile.increment(stackDuration, stackSamples)
-
 		currentNode := cr.profile
 		for i := len(s.Location) - 1; i >= 0; i-- {
 			l := s.Location[i]
@@ -128,8 +143,9 @@ func (cr *CPUReporter) updateCPUProfile(p *profile.Profile) error {
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
-			currentNode.increment(stackDuration, stackSamples)
 		}
+
+		currentNode.increment(stackDuration, stackSamples)
 	}
 
 	return nil

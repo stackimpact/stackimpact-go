@@ -8,8 +8,8 @@ StackImpact is a performance profiler for production applications. It gives deve
 
 #### Features
 
-* Automatic hot spot profiling for CPU, memory allocations, network, system calls and lock contention.
-* Automatic bottleneck tracing for HTTP handlers.
+* Continuous hot spot profiling for CPU, memory allocations, network, system calls and lock contention.
+* Continuous latency bottleneck tracing.
 * Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
 * Anomaly alerts on most important metrics.
@@ -62,7 +62,7 @@ agent := stackimpact.Start(stackimpact.Options{
 All initialization options:
 
 * `AgentKey` (Required) The access key for communication with the StackImpact servers.
-* `AppName` (Required) A name to identify and group application data. Typically, a single codebase corresponds to one application.
+* `AppName` (Required) A name to identify and group application data. Typically, a single codebase, deployable unit or executable module corresponds to one application.
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.

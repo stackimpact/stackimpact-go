@@ -6,41 +6,54 @@ import (
 )
 
 type ProcessReporter struct {
-	agent   *Agent
-	metrics map[string]*Metric
+	agent        *Agent
+	started      bool
+	metrics      map[string]*Metric
+	reportTicker *time.Ticker
 }
 
 func newProcessReporter(agent *Agent) *ProcessReporter {
 	pr := &ProcessReporter{
 		agent:   agent,
-		metrics: make(map[string]*Metric),
+		started: false,
+		metrics: nil,
 	}
 
 	return pr
 }
 
-func (pr *ProcessReporter) start() {
+func (pr *ProcessReporter) reset() {
+	pr.metrics = make(map[string]*Metric)
+}
 
-	delayTimer := time.NewTimer(5 * time.Second)
+func (pr *ProcessReporter) start() {
+	if pr.started {
+		return
+	}
+	pr.started = true
+
+	pr.reset()
+
+	pr.reportTicker = time.NewTicker(60 * time.Second)
 	go func() {
 		defer pr.agent.recoverAndLog()
 
-		<-delayTimer.C
-
-		pr.report()
-
-		reportTicker := time.NewTicker(60 * time.Second)
-		go func() {
-			defer pr.agent.recoverAndLog()
-
-			for {
-				select {
-				case <-reportTicker.C:
-					pr.report()
-				}
+		for {
+			select {
+			case <-pr.reportTicker.C:
+				pr.report()
 			}
-		}()
+		}
 	}()
+}
+
+func (pr *ProcessReporter) stop() {
+	if !pr.started {
+		return
+	}
+	pr.started = false
+
+	pr.reportTicker.Stop()
 }
 
 func (pr *ProcessReporter) reportMetric(typ string, category string, name string, unit string, value float64) *Metric {

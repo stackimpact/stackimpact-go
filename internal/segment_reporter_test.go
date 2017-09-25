@@ -9,6 +9,9 @@ func TestRecordSegment(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 
+	agent.segmentReporter.reset()
+	agent.segmentReporter.started = true
+
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer agent.segmentReporter.recordSegment("seg1", 10)
@@ -31,6 +34,9 @@ func TestRecordSegment(t *testing.T) {
 func TestReadLastDurations(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
+
+	agent.segmentReporter.reset()
+	agent.segmentReporter.started = true
 
 	agent.segmentReporter.recordSegment("seg1", 10.1)
 
