@@ -12,7 +12,7 @@ StackImpact is a performance profiler for production applications. It gives deve
 * Continuous latency bottleneck tracing.
 * Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
-* Anomaly alerts on most important metrics.
+* Anomaly detection.
 * Multiple account users for team collaboration.
 
 Learn more on the [features](https://stackimpact.com/features/) page (with screenshots).
@@ -174,4 +174,4 @@ To enable debug logging, add `Debug: true` to startup options. If the debug log 
 
 ## Overhead
 
-The agent overhead is measured to be less than 1% for applications under high load.
+The agent overhead is measured to be less than 1% for applications under high load. For applications that are horizontally scaled to multiple processes, StackImpact agents are only active on a small subset (adjustable) of the processes at any point of time, therefore the total overhead is much lower.
