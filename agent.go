@@ -19,12 +19,16 @@ type Options struct {
 	AppVersion       string
 	AppEnvironment   string
 	HostName         string
+	AutoProfiling    bool
+	Standalone       bool
 	Debug            bool
 	ProfileAgent     bool
 }
 
 type Agent struct {
 	internalAgent *internal.Agent
+
+	spanStarted int32
 
 	// compatibility < 1.2.0
 	DashboardAddress string
@@ -38,6 +42,7 @@ type Agent struct {
 func NewAgent() *Agent {
 	a := &Agent{
 		internalAgent: internal.NewAgent(),
+		spanStarted:   0,
 	}
 
 	return a
@@ -108,6 +113,40 @@ func (a *Agent) Configure(agentKey string, appName string) {
 	})
 }
 
+// Use this method to instruct the agent to start and stop
+// profiling. It does not guarantee that any profiler will be
+// started. The decision is made by the agent based on the
+// overhead constraints. The method returns Span object, on
+// which the Stop() method should be called.
+func (a *Agent) Profile() *Span {
+	s := newSpan(a)
+	s.start()
+
+	return s
+}
+
+// A helper function to profile HTTP handler function execution
+// by wrapping http.HandleFunc method parameters.
+func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
+	return pattern, func(w http.ResponseWriter, r *http.Request) {
+		span := a.Profile()
+		defer span.Stop()
+
+		handlerFunc(w, r)
+	}
+}
+
+// A helper function to profile HTTP handler execution
+// by wrapping http.Handle method parameters.
+func (a *Agent) ProfileHandler(pattern string, handler http.Handler) (string, http.Handler) {
+	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span := a.Profile()
+		defer span.Stop()
+
+		handler.ServeHTTP(w, r)
+	})
+}
+
 // Starts measurement of execution time of a code segment.
 // To stop measurement call Stop on returned Segment object.
 // After calling Stop the segment is recorded, aggregated and
@@ -161,4 +200,9 @@ func (a *Agent) RecordAndRecoverPanic() {
 	if err := recover(); err != nil {
 		a.internalAgent.RecordError(ErrorGroupRecoveredPanics, err, 1)
 	}
+}
+
+// Returns reported metrics in standalone mode.
+func (a *Agent) ReadMetrics() []interface{} {
+	return a.internalAgent.ReadMetrics()
 }

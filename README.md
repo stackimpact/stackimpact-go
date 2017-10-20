@@ -67,6 +67,7 @@ All initialization options:
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
 * `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
+* `AutoProfiling` (Optional) If set to `false`, disables the default automatic profiling and reporting. `agent.Profile()` should be used instead. Useful for environments without support for timers or background tasks.
 * `Debug` (Optional) Enables debug logging.
 
 
@@ -94,12 +95,43 @@ func main() {
 		AppEnvironment: "production",
 	})
 
-	// use MeasureHandlerFunc or MeasureHandler to additionally measure HTTP request execution time.
-	http.HandleFunc(agent.MeasureHandlerFunc("/", handler)) 
+	http.HandleFunc("/", handler) 
 	http.ListenAndServe(":8080", nil)
 }
 ```
 
+#### Manual profiling
+
+*The use of manual profiling is optional*
+
+Manual profiling is suitable for repeading code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile()` method can be used.
+
+```go
+// Use this method to instruct the agent to start and stop 
+// profiling. It does not guarantee that any profiler will be 
+// started. The decision is made by the agent based on the 
+// overhead constraints. The method returns Span object, on 
+// which the Stop() method should be called.
+
+span := agent.Profile();
+defer span.Stop();
+```
+
+```go
+// A helper function to profile HTTP handler execution by wrapping 
+// http.Handle method parameters.
+// Usage example:
+//   http.Handle(agent.ProfileHandler("/some-path", someHandler))
+pattern, wrappedHandler := agent.ProfileHandler(pattern, handler)
+```
+
+```go
+// A helper function to profile HTTP handler function execution 
+// by wrapping http.HandleFunc method parameters.
+// Usage example:
+//   http.HandleFunc(agent.ProfileHandlerFunc("/some-path", someHandlerFunc))
+pattern, wrappedHandlerFunc := agent.ProfileHandlerFunc(pattern, handlerFunc)
+```
 
 #### Measuring code segments
 
@@ -117,15 +149,16 @@ defer segment.Stop()
 ```
 
 ```go
-// A helper function to measure HTTP handler execution by wrapping http.Handle method parameters.
+// A helper function to measure HTTP handler execution by wrapping 
+// http.Handle method parameters.
 // Usage example:
 //   http.Handle(agent.MeasureHandler("/some-path", someHandler))
 pattern, wrappedHandler := agent.MeasureHandler(pattern, handler)
 ```
 
-
 ```go
-// A helper function to measure HTTP handler function execution by wrapping http.HandleFunc method parameters.
+// A helper function to measure HTTP handler function execution 
+// by wrapping http.HandleFunc method parameters.
 // Usage example:
 //   http.HandleFunc(agent.MeasureHandlerFunc("/some-path", someHandlerFunc))
 pattern, wrappedHandlerFunc := agent.MeasureHandlerFunc(pattern, handlerFunc)

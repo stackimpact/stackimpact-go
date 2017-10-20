@@ -32,13 +32,11 @@ func TestCreateBlockCallGraph(t *testing.T) {
 		done <- true
 	}()
 
+	agent.blockReporter.started.Set()
 	agent.blockReporter.reset()
-	p, _ := agent.blockReporter.readBlockProfile(500)
-	err := agent.blockReporter.updateBlockProfile(p, 500)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	agent.blockReporter.startProfiling(false)
+	time.Sleep(500 * time.Millisecond)
+	agent.blockReporter.stopProfiling()
 
 	blockCallGraph := agent.blockReporter.blockProfile
 	blockCallGraph.normalize(0.5)
@@ -106,13 +104,11 @@ func TestCreateBlockTraceCallGraph(t *testing.T) {
 		}
 	}()
 
+	agent.blockReporter.started.Set()
 	agent.blockReporter.reset()
-	p, _ := agent.blockReporter.readBlockProfile(500)
-	err := agent.blockReporter.updateBlockProfile(p, 500)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	agent.blockReporter.startProfiling(false)
+	time.Sleep(500 * time.Millisecond)
+	agent.blockReporter.stopProfiling()
 
 	blockTraceCallGraph := agent.blockReporter.blockTrace
 	blockTraceCallGraph.evaluateP95()

@@ -6,16 +6,23 @@ import (
 )
 
 type ProcessReporter struct {
-	agent        *Agent
-	started      bool
-	metrics      map[string]*Metric
-	reportTicker *time.Ticker
+	ReportInterval int64
+
+	agent       *Agent
+	started     *Flag
+	reportTimer *Timer
+
+	metrics map[string]*Metric
 }
 
 func newProcessReporter(agent *Agent) *ProcessReporter {
 	pr := &ProcessReporter{
-		agent:   agent,
-		started: false,
+		ReportInterval: 60,
+
+		agent:       agent,
+		started:     &Flag{},
+		reportTimer: nil,
+
 		metrics: nil,
 	}
 
@@ -27,33 +34,29 @@ func (pr *ProcessReporter) reset() {
 }
 
 func (pr *ProcessReporter) start() {
-	if pr.started {
+	if !pr.agent.AutoProfiling {
 		return
 	}
-	pr.started = true
+
+	if !pr.started.SetIfUnset() {
+		return
+	}
 
 	pr.reset()
 
-	pr.reportTicker = time.NewTicker(60 * time.Second)
-	go func() {
-		defer pr.agent.recoverAndLog()
-
-		for {
-			select {
-			case <-pr.reportTicker.C:
-				pr.report()
-			}
-		}
-	}()
+	pr.reportTimer = pr.agent.createTimer(0, time.Duration(pr.ReportInterval)*time.Second, func() {
+		pr.report()
+	})
 }
 
 func (pr *ProcessReporter) stop() {
-	if !pr.started {
+	if !pr.started.UnsetIfSet() {
 		return
 	}
-	pr.started = false
 
-	pr.reportTicker.Stop()
+	if pr.reportTimer != nil {
+		pr.reportTimer.Stop()
+	}
 }
 
 func (pr *ProcessReporter) reportMetric(typ string, category string, name string, unit string, value float64) *Metric {
@@ -76,6 +79,10 @@ func (pr *ProcessReporter) reportMetric(typ string, category string, name string
 }
 
 func (pr *ProcessReporter) report() {
+	if !pr.started.IsSet() {
+		return
+	}
+
 	cpuTime, err := readCPUTime()
 	if err == nil {
 		cpuTimeMetric := pr.reportMetric(TypeCounter, CategoryCPU, NameCPUTime, UnitNanosecond, float64(cpuTime))

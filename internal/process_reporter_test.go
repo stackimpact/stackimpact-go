@@ -11,6 +11,7 @@ func TestReport(t *testing.T) {
 	agent.Debug = true
 
 	agent.processReporter.reset()
+	agent.processReporter.started.Set()
 
 	agent.processReporter.report()
 	agent.processReporter.report()

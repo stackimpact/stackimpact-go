@@ -5,40 +5,62 @@ import (
 )
 
 type ConfigLoader struct {
-	agent *Agent
+	LoadDelay    int64
+	LoadInterval int64
+
+	agent   *Agent
+	started *Flag
+
+	loadTimer *Timer
+
+	lastLoadTimestamp int64
 }
 
 func newConfigLoader(agent *Agent) *ConfigLoader {
 	cl := &ConfigLoader{
-		agent: agent,
+		LoadDelay:    2,
+		LoadInterval: 120,
+
+		agent:   agent,
+		started: &Flag{},
+
+		loadTimer: nil,
+
+		lastLoadTimestamp: 0,
 	}
 
 	return cl
 }
 
 func (cl *ConfigLoader) start() {
-	loadDelay := time.NewTimer(2 * time.Second)
-	go func() {
-		defer cl.agent.recoverAndLog()
+	if !cl.started.SetIfUnset() {
+		return
+	}
 
-		<-loadDelay.C
-		cl.load()
-	}()
+	if cl.agent.AutoProfiling && !cl.agent.Standalone {
+		cl.loadTimer = cl.agent.createTimer(time.Duration(cl.LoadDelay)*time.Second, time.Duration(cl.LoadInterval)*time.Second, func() {
+			cl.load()
+		})
+	}
+}
 
-	loadTicker := time.NewTicker(120 * time.Second)
-	go func() {
-		defer cl.agent.recoverAndLog()
+func (cl *ConfigLoader) stop() {
+	if !cl.started.UnsetIfSet() {
+		return
+	}
 
-		for {
-			select {
-			case <-loadTicker.C:
-				cl.load()
-			}
-		}
-	}()
+	if cl.loadTimer != nil {
+		cl.loadTimer.Stop()
+	}
 }
 
 func (cl *ConfigLoader) load() {
+	now := time.Now().Unix()
+	if !cl.agent.AutoProfiling && cl.lastLoadTimestamp > now-cl.LoadInterval {
+		return
+	}
+	cl.lastLoadTimestamp = now
+
 	payload := map[string]interface{}{}
 	if config, err := cl.agent.apiRequest.post("config", payload); err == nil {
 		// agent_enabled yes|no
@@ -69,10 +91,12 @@ func (cl *ConfigLoader) load() {
 			cl.agent.segmentReporter.start()
 			cl.agent.errorReporter.start()
 			cl.agent.processReporter.start()
+			cl.agent.log("Agent enabled")
 		} else {
 			cl.agent.segmentReporter.stop()
 			cl.agent.errorReporter.stop()
 			cl.agent.processReporter.stop()
+			cl.agent.log("Agent disabled")
 		}
 	} else {
 		cl.agent.log("Error loading config from Dashboard")

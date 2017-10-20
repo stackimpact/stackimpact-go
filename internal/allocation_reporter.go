@@ -8,6 +8,8 @@ import (
 	"math"
 	"runtime"
 	"runtime/pprof"
+	"sync"
+	"time"
 
 	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
 )
@@ -33,49 +35,76 @@ func readMemAlloc() float64 {
 }
 
 type AllocationReporter struct {
-	ReportInterval    int64
-	agent             *Agent
-	started           bool
-	profilerScheduler *ProfilerScheduler
+	ReportInterval int64
+
+	agent       *Agent
+	started     *Flag
+	reportTimer *Timer
+
+	profileLock           *sync.Mutex
+	profileStartTimestamp int64
 }
 
 func newAllocationReporter(agent *Agent) *AllocationReporter {
 	ar := &AllocationReporter{
-		ReportInterval:    120000,
-		agent:             agent,
-		started:           false,
-		profilerScheduler: nil,
-	}
+		ReportInterval: 120,
 
-	ar.profilerScheduler = newProfilerScheduler(agent, 0, 0, ar.ReportInterval, nil,
-		func() {
-			ar.report()
-		},
-	)
+		agent:       agent,
+		started:     &Flag{},
+		reportTimer: nil,
+
+		profileLock:           &sync.Mutex{},
+		profileStartTimestamp: 0,
+	}
 
 	return ar
 }
 
 func (ar *AllocationReporter) start() {
-	if ar.started {
+	if !ar.started.SetIfUnset() {
 		return
 	}
-	ar.started = true
 
-	ar.profilerScheduler.start()
+	ar.profileLock.Lock()
+	defer ar.profileLock.Unlock()
+
+	ar.reset()
+
+	if ar.agent.AutoProfiling {
+		ar.reportTimer = ar.agent.createTimer(0, time.Duration(ar.ReportInterval)*time.Second, func() {
+			ar.report()
+		})
+	}
 }
 
 func (ar *AllocationReporter) stop() {
-	if !ar.started {
+	if !ar.started.UnsetIfSet() {
 		return
 	}
-	ar.started = false
 
-	ar.profilerScheduler.stop()
+	if ar.reportTimer != nil {
+		ar.reportTimer.Stop()
+	}
+}
+
+func (ar *AllocationReporter) reset() {
+	ar.profileStartTimestamp = time.Now().Unix()
 }
 
 func (ar *AllocationReporter) report() {
-	ar.agent.log("Reading heap profile...")
+	if !ar.started.IsSet() {
+		return
+	}
+
+	ar.profileLock.Lock()
+	defer ar.profileLock.Unlock()
+
+	if !ar.agent.AutoProfiling && ar.profileStartTimestamp > time.Now().Unix()-ar.ReportInterval {
+		return
+	}
+
+	ar.agent.log("Allocation profiler: reporting profile.")
+
 	p, e := ar.readHeapProfile()
 	if e != nil {
 		ar.agent.error(e)
@@ -84,7 +113,6 @@ func (ar *AllocationReporter) report() {
 	if p == nil {
 		return
 	}
-	ar.agent.log("Done.")
 
 	// allocated size
 	if callGraph, err := ar.createAllocationCallGraph(p); err != nil {
@@ -98,6 +126,8 @@ func (ar *AllocationReporter) report() {
 		metric.createMeasurement(TriggerTimer, callGraph.measurement, 0, callGraph)
 		ar.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
+
+	ar.reset()
 }
 
 func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*BreakdownNode, error) {

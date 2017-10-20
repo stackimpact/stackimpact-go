@@ -8,17 +8,24 @@ import (
 )
 
 type ErrorReporter struct {
-	agent        *Agent
-	started      bool
-	recordLock   *sync.RWMutex
-	errorGraphs  map[string]*BreakdownNode
-	reportTicker *time.Ticker
+	ReportInterval int64
+
+	agent       *Agent
+	started     *Flag
+	reportTimer *Timer
+
+	recordLock  *sync.RWMutex
+	errorGraphs map[string]*BreakdownNode
 }
 
 func newErrorReporter(agent *Agent) *ErrorReporter {
 	er := &ErrorReporter{
-		agent:      agent,
-		started:    false,
+		ReportInterval: 60,
+
+		agent:       agent,
+		started:     &Flag{},
+		reportTimer: nil,
+
 		recordLock: &sync.RWMutex{},
 	}
 
@@ -26,37 +33,36 @@ func newErrorReporter(agent *Agent) *ErrorReporter {
 }
 
 func (er *ErrorReporter) reset() {
+	er.recordLock.Lock()
+	defer er.recordLock.Unlock()
+
 	er.errorGraphs = make(map[string]*BreakdownNode)
 }
 
 func (er *ErrorReporter) start() {
-	if er.started {
+	if !er.agent.AutoProfiling {
 		return
 	}
-	er.started = true
+
+	if !er.started.SetIfUnset() {
+		return
+	}
 
 	er.reset()
 
-	er.reportTicker = time.NewTicker(60 * time.Second)
-	go func() {
-		defer er.agent.recoverAndLog()
-
-		for {
-			select {
-			case <-er.reportTicker.C:
-				er.report()
-			}
-		}
-	}()
+	er.reportTimer = er.agent.createTimer(0, time.Duration(er.ReportInterval)*time.Second, func() {
+		er.report()
+	})
 }
 
 func (er *ErrorReporter) stop() {
-	if !er.started {
+	if !er.started.UnsetIfSet() {
 		return
 	}
-	er.started = false
 
-	er.reportTicker.Stop()
+	if er.reportTimer != nil {
+		er.reportTimer.Stop()
+	}
 }
 
 func callerFrames(skip int) []string {
@@ -107,7 +113,7 @@ func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode,
 }
 
 func (er *ErrorReporter) recordError(group string, err error, skip int) {
-	if !er.started {
+	if !er.started.IsSet() {
 		return
 	}
 
@@ -144,7 +150,7 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 }
 
 func (er *ErrorReporter) report() {
-	if !er.agent.config.isAgentEnabled() {
+	if !er.started.IsSet() {
 		return
 	}
 

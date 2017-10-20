@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCreateCallGraph(t *testing.T) {
@@ -28,14 +29,12 @@ func TestCreateCallGraph(t *testing.T) {
 		done <- true
 	}()
 
+	agent.cpuReporter.started.Set()
 	agent.cpuReporter.reset()
-	p, _ := agent.cpuReporter.readCPUProfile(1000)
-	//fmt.Printf("PROFILE: %v\n", p.String())
-	err := agent.cpuReporter.updateCPUProfile(p)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	agent.cpuReporter.startProfiling(false)
+	time.Sleep(500 * time.Millisecond)
+	agent.cpuReporter.stopProfiling()
+
 	callGraph := agent.cpuReporter.profile
 	callGraph.propagate()
 	callGraph.convertToPercentage(float64(1000 * 1e6 * runtime.NumCPU()))

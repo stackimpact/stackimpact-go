@@ -8,21 +8,21 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const AgentVersion = "2.1.0"
+const AgentVersion = "2.2.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
 
 type Agent struct {
-	nextId  int64
-	buildId string
-	runId   string
-	runTs   int64
+	randSource *rand.Rand
+	nextId     int64
+	buildId    string
+	runId      string
+	runTs      int64
 
 	apiRequest         *APIRequest
 	config             *Config
@@ -35,7 +35,7 @@ type Agent struct {
 	segmentReporter    *SegmentReporter
 	errorReporter      *ErrorReporter
 
-	profilerLock *sync.Mutex
+	profilerActive *Flag
 
 	// Options
 	DashboardAddress string
@@ -45,16 +45,19 @@ type Agent struct {
 	AppVersion       string
 	AppEnvironment   string
 	HostName         string
+	AutoProfiling    bool
+	Standalone       bool
 	Debug            bool
 	ProfileAgent     bool
 }
 
 func NewAgent() *Agent {
 	a := &Agent{
-		nextId:  0,
-		runId:   "",
-		buildId: "",
-		runTs:   time.Now().Unix(),
+		randSource: rand.New(rand.NewSource(time.Now().UnixNano())),
+		nextId:     0,
+		runId:      "",
+		buildId:    "",
+		runTs:      time.Now().Unix(),
 
 		apiRequest:         nil,
 		config:             nil,
@@ -67,7 +70,7 @@ func NewAgent() *Agent {
 		segmentReporter:    nil,
 		errorReporter:      nil,
 
-		profilerLock: &sync.Mutex{},
+		profilerActive: &Flag{},
 
 		DashboardAddress: SAASDashboardAddress,
 		ProxyAddress:     "",
@@ -76,6 +79,8 @@ func NewAgent() *Agent {
 		AppVersion:       "",
 		AppEnvironment:   "",
 		HostName:         "",
+		AutoProfiling:    true,
+		Standalone:       false,
 		Debug:            false,
 		ProfileAgent:     false,
 	}
@@ -119,21 +124,56 @@ func (a *Agent) Start() {
 	return
 }
 
-func (a *Agent) calculateProgramSHA1() string {
-	file, err := os.Open(os.Args[0])
-	if err != nil {
-		a.error(err)
-		return ""
+func (a *Agent) Enable() {
+	if !a.config.isAgentEnabled() {
+		a.cpuReporter.start()
+		a.allocationReporter.start()
+		a.blockReporter.start()
+		a.segmentReporter.start()
+		a.errorReporter.start()
+		a.processReporter.start()
+		a.config.setAgentEnabled(true)
 	}
-	defer file.Close()
+}
 
-	hash := sha1.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		a.error(err)
-		return ""
+func (a *Agent) Disable() {
+	if a.config.isAgentEnabled() {
+		a.config.setAgentEnabled(false)
+		a.cpuReporter.stop()
+		a.allocationReporter.stop()
+		a.blockReporter.stop()
+		a.segmentReporter.stop()
+		a.errorReporter.stop()
+		a.processReporter.stop()
 	}
+}
 
-	return hex.EncodeToString(hash.Sum(nil))
+func (a *Agent) StartProfiling() bool {
+	defer a.recoverAndLog()
+
+	if rand.Intn(2) == 0 {
+		return a.cpuReporter.startProfiling(true) || a.blockReporter.startProfiling(true)
+	} else {
+		return a.blockReporter.startProfiling(true) || a.cpuReporter.startProfiling(true)
+	}
+}
+
+func (a *Agent) StopProfiling() {
+	defer a.recoverAndLog()
+
+	a.cpuReporter.stopProfiling()
+	a.blockReporter.stopProfiling()
+
+	if !a.AutoProfiling {
+		a.cpuReporter.report()
+		a.allocationReporter.report()
+		a.blockReporter.report()
+
+		if !a.Standalone {
+			a.messageQueue.flush()
+			a.configLoader.load()
+		}
+	}
 }
 
 func (a *Agent) RecordSegment(name string, duration float64) {
@@ -158,6 +198,23 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	}
 
 	a.errorReporter.recordError(group, err, skipFrames+1)
+}
+
+func (a *Agent) ReadMetrics() []interface{} {
+	if !a.Standalone {
+		return make([]interface{}, 0)
+	}
+
+	messages := a.messageQueue.read()
+
+	metrics := make([]interface{}, 0)
+	for _, message := range messages {
+		if message.topic == "metric" {
+			metrics = append(metrics, message.content)
+		}
+	}
+
+	return metrics
 }
 
 func (a *Agent) log(format string, values ...interface{}) {
@@ -187,7 +244,7 @@ func (a *Agent) uuid() string {
 
 	uuid :=
 		strconv.FormatInt(time.Now().Unix(), 10) +
-			strconv.Itoa(rand.Intn(1000000000)) +
+			strconv.Itoa(a.randSource.Intn(1000000000)) +
 			strconv.FormatInt(n, 10)
 
 	return sha1String(uuid)
@@ -198,4 +255,113 @@ func sha1String(s string) string {
 	sha1.Write([]byte(s))
 
 	return hex.EncodeToString(sha1.Sum(nil))
+}
+
+func (a *Agent) calculateProgramSHA1() string {
+	file, err := os.Open(os.Args[0])
+	if err != nil {
+		a.error(err)
+		return ""
+	}
+	defer file.Close()
+
+	hash := sha1.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		a.error(err)
+		return ""
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+type Timer struct {
+	agent              *Agent
+	delayTimer         *time.Timer
+	delayTimerDone     chan bool
+	intervalTicker     *time.Ticker
+	intervalTickerDone chan bool
+	stopped            bool
+}
+
+func NewTimer(agent *Agent, delay time.Duration, interval time.Duration, job func()) *Timer {
+	t := &Timer{
+		agent:   agent,
+		stopped: false,
+	}
+
+	t.delayTimerDone = make(chan bool)
+	t.delayTimer = time.NewTimer(delay)
+	go func() {
+		defer t.agent.recoverAndLog()
+
+		select {
+		case <-t.delayTimer.C:
+			if interval > 0 {
+				t.intervalTickerDone = make(chan bool)
+				t.intervalTicker = time.NewTicker(interval)
+				go func() {
+					defer t.agent.recoverAndLog()
+
+					for {
+						select {
+						case <-t.intervalTicker.C:
+							job()
+						case <-t.intervalTickerDone:
+							return
+						}
+					}
+				}()
+			}
+
+			if delay > 0 {
+				job()
+			}
+		case <-t.delayTimerDone:
+			return
+		}
+	}()
+
+	return t
+}
+
+func (t *Timer) Stop() {
+	if !t.stopped {
+		t.stopped = true
+
+		t.delayTimer.Stop()
+		close(t.delayTimerDone)
+
+		if t.intervalTicker != nil {
+			t.intervalTicker.Stop()
+			close(t.intervalTickerDone)
+		}
+	}
+}
+
+func (a *Agent) createTimer(delay time.Duration, interval time.Duration, job func()) *Timer {
+	return NewTimer(a, delay, interval, job)
+}
+
+type Flag struct {
+	value int32
+}
+
+func (f *Flag) SetIfUnset() bool {
+	return atomic.CompareAndSwapInt32(&f.value, 0, 1)
+}
+
+func (f *Flag) UnsetIfSet() bool {
+	return atomic.CompareAndSwapInt32(&f.value, 1, 0)
+}
+
+func (f *Flag) Set() {
+	atomic.StoreInt32(&f.value, 1)
+}
+
+func (f *Flag) Unset() {
+	atomic.StoreInt32(&f.value, 0)
+}
+
+func (f *Flag) IsSet() bool {
+	return atomic.LoadInt32(&f.value) == 1
 }

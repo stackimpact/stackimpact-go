@@ -12,61 +12,127 @@ type Message struct {
 }
 
 type MessageQueue struct {
-	agent               *Agent
-	queue               []Message
-	queueLock           *sync.Mutex
-	lastUploadTimestamp int64
-	backoffSeconds      int
+	MessageTTL    int64
+	FlushInterval int64
+
+	agent   *Agent
+	started *Flag
+
+	flushTimer *Timer
+
+	queue              []Message
+	queueLock          *sync.Mutex
+	lastFlushTimestamp int64
+	backoffSeconds     int64
 }
 
 func newMessageQueue(agent *Agent) *MessageQueue {
 	mq := &MessageQueue{
-		agent:               agent,
-		queue:               make([]Message, 0),
-		queueLock:           &sync.Mutex{},
-		lastUploadTimestamp: 0,
-		backoffSeconds:      0,
+		MessageTTL:    10 * 60,
+		FlushInterval: 5,
+
+		agent:   agent,
+		started: &Flag{},
+
+		flushTimer: nil,
+
+		queue:              make([]Message, 0),
+		queueLock:          &sync.Mutex{},
+		lastFlushTimestamp: 0,
+		backoffSeconds:     0,
 	}
 
 	return mq
 }
 
 func (mq *MessageQueue) start() {
-	flushTicker := time.NewTicker(5 * time.Second)
+	if !mq.started.SetIfUnset() {
+		return
+	}
 
-	go func() {
-		defer mq.agent.recoverAndLog()
+	if mq.agent.AutoProfiling && !mq.agent.Standalone {
+		mq.flushTimer = mq.agent.createTimer(0, time.Duration(mq.FlushInterval)*time.Second, func() {
+			mq.flush()
+		})
+	}
+}
 
-		for {
-			select {
-			case <-flushTicker.C:
-				mq.queueLock.Lock()
-				l := len(mq.queue)
-				mq.queueLock.Unlock()
+func (mq *MessageQueue) stop() {
+	if !mq.started.UnsetIfSet() {
+		return
+	}
 
-				if l > 0 && (mq.lastUploadTimestamp+int64(mq.backoffSeconds) < time.Now().Unix()) {
-					mq.expire()
-					mq.flush()
-				}
-			}
-		}
-	}()
+	if mq.flushTimer != nil {
+		mq.flushTimer.Stop()
+	}
+}
+
+func (mq *MessageQueue) size() int {
+	mq.queueLock.Lock()
+	defer mq.queueLock.Unlock()
+
+	return len(mq.queue)
 }
 
 func (mq *MessageQueue) expire() {
+	mq.queueLock.Lock()
+	defer mq.queueLock.Unlock()
+
+	if len(mq.queue) == 0 {
+		return
+	}
+
 	now := time.Now().Unix()
 
-	mq.queueLock.Lock()
+	if mq.queue[0].addedAt > now-mq.MessageTTL {
+		return
+	}
+
 	for i := len(mq.queue) - 1; i >= 0; i-- {
-		if mq.queue[i].addedAt < now-10*60 {
+		if mq.queue[i].addedAt < now-mq.MessageTTL {
 			mq.queue = mq.queue[i+1:]
 			break
 		}
 	}
+
+	mq.agent.log("Expired old messages from the queue")
+}
+
+func (mq *MessageQueue) addMessage(topic string, message map[string]interface{}) {
+	m := Message{
+		topic:   topic,
+		content: message,
+		addedAt: time.Now().Unix(),
+	}
+
+	// add new message
+	mq.queueLock.Lock()
+	mq.queue = append(mq.queue, m)
 	mq.queueLock.Unlock()
+
+	mq.agent.log("Added message to the queue for topic: %v", topic)
+	mq.agent.log("%v", message)
+
+	mq.expire()
 }
 
 func (mq *MessageQueue) flush() {
+	now := time.Now().Unix()
+	if !mq.agent.AutoProfiling && mq.lastFlushTimestamp > now-mq.FlushInterval {
+		return
+	}
+
+	if mq.size() == 0 {
+		return
+	}
+
+	// flush only if backoff time is elapsed
+	if mq.lastFlushTimestamp+mq.backoffSeconds > now {
+		return
+	}
+
+	mq.expire()
+
 	mq.queueLock.Lock()
 	outgoing := mq.queue
 	mq.queue = make([]Message, 0)
@@ -86,7 +152,7 @@ func (mq *MessageQueue) flush() {
 		"messages": messages,
 	}
 
-	mq.lastUploadTimestamp = time.Now().Unix()
+	mq.lastFlushTimestamp = now
 
 	if _, err := mq.agent.apiRequest.post("upload", payload); err == nil {
 		// reset backoff
@@ -109,17 +175,12 @@ func (mq *MessageQueue) flush() {
 	}
 }
 
-func (mq *MessageQueue) addMessage(topic string, message map[string]interface{}) {
-	m := Message{
-		topic:   topic,
-		content: message,
-		addedAt: time.Now().Unix(),
-	}
-
+func (mq *MessageQueue) read() []Message {
 	mq.queueLock.Lock()
-	mq.queue = append(mq.queue, m)
-	mq.queueLock.Unlock()
+	defer mq.queueLock.Unlock()
 
-	mq.agent.log("Added message to the queue for topic: %v", topic)
-	mq.agent.log("%v", message)
+	messages := mq.queue
+	mq.queue = make([]Message, 0)
+
+	return messages
 }

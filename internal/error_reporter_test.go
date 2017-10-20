@@ -13,7 +13,7 @@ func TestRecordError(t *testing.T) {
 	agent.Debug = true
 
 	agent.errorReporter.reset()
-	agent.errorReporter.started = true
+	agent.errorReporter.started.Set()
 
 	for i := 0; i < 100; i++ {
 		go func() {

@@ -178,6 +178,26 @@ func simulateLockWait() {
 	}
 }
 
+func simulateManualProfiling() {
+	for {
+		span := agent.Profile()
+		fmt.Println("Manual profile started")
+
+		// wait
+		time.Sleep(time.Duration(10+rand.Intn(10)) * time.Millisecond)
+
+		// cpu
+		for i := 0; i < 1000; i++ {
+			rand.Intn(1000)
+		}
+
+		span.Stop()
+		fmt.Println("Manual profile stopped")
+
+		time.Sleep(20 * time.Second)
+	}
+}
+
 func simulateSegments() {
 	for {
 		done1 := make(chan bool)
@@ -194,6 +214,7 @@ func simulateSegments() {
 		<-done1
 	}
 }
+
 
 func simulateHandlerSegments() {
 	// start HTTP server
@@ -295,6 +316,7 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
+	go simulateManualProfiling()
 	go simulateSegments()
 	go simulateHandlerSegments()
 	go simulateErrors()

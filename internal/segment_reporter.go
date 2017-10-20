@@ -6,63 +6,66 @@ import (
 )
 
 type SegmentReporter struct {
-	agent            *Agent
-	started          bool
-	segmentNodes     map[string]*BreakdownNode
-	segmentDurations map[string]*float64
-	recordLock       *sync.RWMutex
-	reportTicker     *time.Ticker
+	ReportInterval int64
+
+	agent       *Agent
+	started     *Flag
+	reportTimer *Timer
+
+	segmentNodes map[string]*BreakdownNode
+	recordLock   *sync.RWMutex
 }
 
 func newSegmentReporter(agent *Agent) *SegmentReporter {
 	sr := &SegmentReporter{
-		agent:      agent,
-		started:    false,
-		recordLock: &sync.RWMutex{},
+		ReportInterval: 60,
+
+		agent:       agent,
+		started:     &Flag{},
+		reportTimer: nil,
+
+		segmentNodes: nil,
+		recordLock:   &sync.RWMutex{},
 	}
 
 	return sr
 }
 
 func (sr *SegmentReporter) reset() {
+	sr.recordLock.Lock()
+	defer sr.recordLock.Unlock()
+
 	sr.segmentNodes = make(map[string]*BreakdownNode)
-	sr.segmentDurations = make(map[string]*float64)
 }
 
 func (sr *SegmentReporter) start() {
-	if sr.started {
+	if !sr.agent.AutoProfiling {
 		return
 	}
-	sr.started = true
+
+	if !sr.started.SetIfUnset() {
+		return
+	}
 
 	sr.reset()
 
-	sr.reportTicker = time.NewTicker(60 * time.Second)
-	go func() {
-		defer sr.agent.recoverAndLog()
-
-		for {
-			select {
-			case <-sr.reportTicker.C:
-				if sr.agent.config.isAgentEnabled() {
-					sr.report()
-				}
-			}
-		}
-	}()
+	sr.reportTimer = sr.agent.createTimer(0, time.Duration(sr.ReportInterval)*time.Second, func() {
+		sr.report()
+	})
 }
 
 func (sr *SegmentReporter) stop() {
-	if !sr.started {
+	if !sr.started.UnsetIfSet() {
 		return
 	}
-	sr.started = false
 
-	sr.reportTicker.Stop()
+	if sr.reportTimer != nil {
+		sr.reportTimer.Stop()
+	}
 }
 
 func (sr *SegmentReporter) recordSegment(name string, duration float64) {
-	if !sr.started {
+	if !sr.started.IsSet() {
 		return
 	}
 
@@ -94,24 +97,13 @@ func (sr *SegmentReporter) recordSegment(name string, duration float64) {
 		node.updateP95(duration)
 		sr.recordLock.RUnlock()
 	}
-
-	// Save last duration
-	sr.recordLock.RLock()
-	lastDurationAddr, dExists := sr.segmentDurations[name]
-	if dExists {
-		StoreFloat64(lastDurationAddr, duration)
-	}
-	sr.recordLock.RUnlock()
-
-	if !dExists {
-		sr.recordLock.Lock()
-		d := duration
-		sr.segmentDurations[name] = &d
-		sr.recordLock.Unlock()
-	}
 }
 
 func (sr *SegmentReporter) report() {
+	if !sr.started.IsSet() {
+		return
+	}
+
 	sr.recordLock.Lock()
 	outgoing := sr.segmentNodes
 	sr.segmentNodes = make(map[string]*BreakdownNode)
@@ -127,20 +119,4 @@ func (sr *SegmentReporter) report() {
 		metric.createMeasurement(TriggerTimer, segmentRoot.measurement, 60, segmentRoot)
 		sr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
-}
-
-func (sr *SegmentReporter) readLastDurations() map[string]float64 {
-	sr.recordLock.RLock()
-	defer sr.recordLock.RUnlock()
-
-	read := make(map[string]float64)
-	for name, durationAddr := range sr.segmentDurations {
-		duration := LoadFloat64(durationAddr)
-		if duration != -1 {
-			read[name] = LoadFloat64(durationAddr)
-			StoreFloat64(durationAddr, -1)
-		}
-	}
-
-	return read
 }

@@ -5,82 +5,169 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
 )
 
 type CPUReporter struct {
-	RecordInterval    int64
-	RecordDuration    int64
-	ReportInterval    int64
-	agent             *Agent
-	started           bool
-	profilerScheduler *ProfilerScheduler
-	profile           *BreakdownNode
-	profileDuration   int64
+	MaxProfileDuration int64
+	MaxSpanDuration    int64
+	MaxSpanCount       int32
+	SpanInterval       int64
+	ReportInterval     int64
+
+	agent       *Agent
+	started     *Flag
+	spanTimer   *Timer
+	reportTimer *Timer
+
+	profile               *BreakdownNode
+	profileLock           *sync.Mutex
+	profileStartTimestamp int64
+	profileDuration       int64
+	spanCount             int32
+	spanActive            *Flag
+	spanWriter            *bufio.Writer
+	spanBuffer            *bytes.Buffer
+	spanStart             int64
+	spanTimeout           *Timer
 }
 
 func newCPUReporter(agent *Agent) *CPUReporter {
 	cr := &CPUReporter{
-		RecordInterval:    10000,
-		RecordDuration:    2000,
-		ReportInterval:    120000,
-		agent:             agent,
-		started:           false,
-		profilerScheduler: nil,
-		profile:           nil,
-		profileDuration:   0,
-	}
+		MaxProfileDuration: 20,
+		MaxSpanDuration:    2,
+		MaxSpanCount:       30,
+		SpanInterval:       8,
+		ReportInterval:     120,
 
-	cr.profilerScheduler = newProfilerScheduler(agent,
-		cr.RecordInterval,
-		cr.RecordDuration,
-		cr.ReportInterval,
-		func(duration int64) {
-			cr.record(duration)
-		},
-		func() {
-			cr.report()
-		},
-	)
+		agent:       agent,
+		started:     &Flag{},
+		spanTimer:   nil,
+		reportTimer: nil,
+
+		profile:               nil,
+		profileLock:           &sync.Mutex{},
+		profileStartTimestamp: 0,
+		profileDuration:       0,
+		spanCount:             0,
+		spanActive:            &Flag{},
+		spanWriter:            nil,
+		spanBuffer:            nil,
+		spanStart:             0,
+		spanTimeout:           nil,
+	}
 
 	return cr
 }
 
 func (cr *CPUReporter) start() {
-	if cr.started {
+	if !cr.started.SetIfUnset() {
 		return
 	}
-	cr.started = true
+
+	cr.profileLock.Lock()
+	defer cr.profileLock.Unlock()
 
 	cr.reset()
-	cr.profilerScheduler.start()
+
+	if cr.agent.AutoProfiling {
+		cr.spanTimer = cr.agent.createTimer(0, time.Duration(cr.SpanInterval)*time.Second, func() {
+			time.Sleep(time.Duration(rand.Int63n(cr.SpanInterval-cr.MaxSpanDuration)) * time.Second)
+			cr.startProfiling(false)
+		})
+
+		cr.reportTimer = cr.agent.createTimer(0, time.Duration(cr.ReportInterval)*time.Second, func() {
+			cr.report()
+		})
+	}
 }
 
 func (cr *CPUReporter) stop() {
-	if !cr.started {
+	if !cr.started.UnsetIfSet() {
 		return
 	}
-	cr.started = false
 
-	cr.profilerScheduler.stop()
+	if cr.spanTimer != nil {
+		cr.spanTimer.Stop()
+	}
+
+	if cr.reportTimer != nil {
+		cr.reportTimer.Stop()
+	}
 }
 
 func (cr *CPUReporter) reset() {
 	cr.profile = newBreakdownNode("root")
+	cr.profileStartTimestamp = time.Now().Unix()
 	cr.profileDuration = 0
+	cr.spanCount = 0
 }
 
-func (cr *CPUReporter) record(duration int64) {
+func (cr *CPUReporter) startProfiling(rateLimit bool) bool {
+	if !cr.started.IsSet() {
+		return false
+	}
+
+	cr.profileLock.Lock()
+	defer cr.profileLock.Unlock()
+
+	if cr.profileDuration > cr.MaxProfileDuration*1e9 {
+		cr.agent.log("CPU profiler: max profiling duration reached.")
+		return false
+	}
+
+	if rateLimit && cr.spanCount > cr.MaxSpanCount {
+		cr.agent.log("CPU profiler: max profiling span count reached.")
+		return false
+	}
+
+	if !cr.agent.profilerActive.SetIfUnset() {
+		cr.agent.log("CPU profiler: another profiler currently active.")
+		return false
+	}
+
 	cr.agent.log("Starting CPU profiler.")
-	p, e := cr.readCPUProfile(duration)
-	if e != nil {
-		cr.agent.error(e)
+
+	err := cr.startCPUProfiler()
+	if err != nil {
+		cr.agent.profilerActive.Unset()
+		cr.agent.error(err)
+		return false
+	}
+
+	cr.spanTimeout = cr.agent.createTimer(time.Duration(cr.MaxSpanDuration)*time.Second, 0, func() {
+		cr.stopProfiling()
+	})
+
+	cr.spanCount++
+	cr.spanActive.Set()
+	cr.spanStart = time.Now().UnixNano()
+
+	return true
+}
+
+func (cr *CPUReporter) stopProfiling() {
+	cr.profileLock.Lock()
+	defer cr.profileLock.Unlock()
+
+	if !cr.spanActive.UnsetIfSet() {
+		return
+	}
+	cr.spanTimeout.Stop()
+
+	defer cr.agent.profilerActive.Unset()
+
+	p, err := cr.stopCPUProfiler()
+	if err != nil {
+		cr.agent.error(err)
 		return
 	}
 	if p == nil {
@@ -88,15 +175,32 @@ func (cr *CPUReporter) record(duration int64) {
 	}
 	cr.agent.log("CPU profiler stopped.")
 
-	if err := cr.updateCPUProfile(p); err != nil {
-		cr.agent.error(err)
+	if uerr := cr.updateCPUProfile(p); uerr != nil {
+		cr.agent.error(uerr)
 	}
 
-	cr.profileDuration += duration
+	cr.profileDuration += time.Now().UnixNano() - cr.spanStart
 }
 
 func (cr *CPUReporter) report() {
-	cr.profile.convertToPercentage(float64(cr.profileDuration * 1e6 * int64(runtime.NumCPU())))
+	if !cr.started.IsSet() {
+		return
+	}
+
+	cr.profileLock.Lock()
+	defer cr.profileLock.Unlock()
+
+	if !cr.agent.AutoProfiling && cr.profileStartTimestamp > time.Now().Unix()-cr.ReportInterval {
+		return
+	}
+
+	if cr.profileDuration == 0 {
+		return
+	}
+
+	cr.agent.log("CPU profiler: reporting profile.")
+
+	cr.profile.convertToPercentage(float64(cr.profileDuration * int64(runtime.NumCPU())))
 	cr.profile.propagate()
 	// filter calls with lower than 1% CPU stake
 	cr.profile.filter(2, 1, 100)
@@ -151,39 +255,34 @@ func (cr *CPUReporter) updateCPUProfile(p *profile.Profile) error {
 	return nil
 }
 
-func (cr *CPUReporter) readCPUProfile(duration int64) (*profile.Profile, error) {
-	var buf bytes.Buffer
-	w := bufio.NewWriter(&buf)
+func (cr *CPUReporter) startCPUProfiler() error {
+	cr.spanBuffer = &bytes.Buffer{}
+	cr.spanWriter = bufio.NewWriter(cr.spanBuffer)
+	cr.spanStart = time.Now().UnixNano()
 
-	start := time.Now()
-
-	err := pprof.StartCPUProfile(w)
+	err := pprof.StartCPUProfile(cr.spanWriter)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	done := make(chan bool)
-	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
-	go func() {
-		defer cr.agent.recoverAndLog()
+	return nil
+}
 
-		<-timer.C
+func (cr *CPUReporter) stopCPUProfiler() (*profile.Profile, error) {
+	pprof.StopCPUProfile()
 
-		pprof.StopCPUProfile()
-
-		done <- true
-	}()
-	<-done
-
-	w.Flush()
-	r := bufio.NewReader(&buf)
+	cr.spanWriter.Flush()
+	r := bufio.NewReader(cr.spanBuffer)
 
 	if p, perr := profile.Parse(r); perr == nil {
+		cr.spanWriter = nil
+		cr.spanBuffer = nil
+
 		if p.TimeNanos == 0 {
-			p.TimeNanos = start.UnixNano()
+			p.TimeNanos = cr.spanStart
 		}
 		if p.DurationNanos == 0 {
-			p.DurationNanos = duration * 1e6
+			p.DurationNanos = time.Now().UnixNano() - cr.spanStart
 		}
 
 		if serr := symbolizeProfile(p); serr != nil {
@@ -196,6 +295,9 @@ func (cr *CPUReporter) readCPUProfile(duration int64) (*profile.Profile, error) 
 
 		return p, nil
 	} else {
+		cr.spanWriter = nil
+		cr.spanBuffer = nil
+
 		return nil, perr
 	}
 }

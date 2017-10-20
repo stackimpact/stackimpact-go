@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"runtime"
 	"runtime/pprof"
+	"sync"
 	"time"
 
 	profile "github.com/stackimpact/stackimpact-go/internal/pprof/profile"
@@ -19,77 +21,160 @@ type BlockValues struct {
 }
 
 type BlockReporter struct {
-	RecordInterval    int64
-	RecordDuration    int64
-	ReportInterval    int64
-	agent             *Agent
-	started           bool
-	profilerScheduler *ProfilerScheduler
-	prevValues        map[string]*BlockValues
-	blockProfile      *BreakdownNode
-	blockTrace        *BreakdownNode
-	profileDuration   int64
+	MaxProfileDuration int64
+	MaxSpanDuration    int64
+	MaxSpanCount       int32
+	SpanInterval       int64
+	ReportInterval     int64
+
+	agent       *Agent
+	started     *Flag
+	spanTimer   *Timer
+	reportTimer *Timer
+
+	blockProfile          *BreakdownNode
+	blockTrace            *BreakdownNode
+	profileLock           *sync.Mutex
+	profileStartTimestamp int64
+	profileDuration       int64
+	prevValues            map[string]*BlockValues
+	spanCount             int32
+	spanActive            *Flag
+	spanProfile           *pprof.Profile
+	spanStart             int64
+	spanTimeout           *Timer
 }
 
 func newBlockReporter(agent *Agent) *BlockReporter {
 	br := &BlockReporter{
-		RecordInterval:    20000,
-		RecordDuration:    4000,
-		ReportInterval:    120000,
-		agent:             agent,
-		started:           false,
-		profilerScheduler: nil,
-		prevValues:        make(map[string]*BlockValues),
-		blockProfile:      nil,
-		blockTrace:        nil,
-		profileDuration:   0,
-	}
+		MaxProfileDuration: 20,
+		MaxSpanDuration:    4,
+		MaxSpanCount:       30,
+		SpanInterval:       16,
+		ReportInterval:     120,
 
-	br.profilerScheduler = newProfilerScheduler(agent,
-		br.RecordInterval,
-		br.RecordDuration,
-		br.ReportInterval,
-		func(duration int64) {
-			br.record(duration)
-		},
-		func() {
-			br.report()
-		},
-	)
+		agent:       agent,
+		started:     &Flag{},
+		spanTimer:   nil,
+		reportTimer: nil,
+
+		blockProfile:          nil,
+		blockTrace:            nil,
+		profileLock:           &sync.Mutex{},
+		profileStartTimestamp: 0,
+		profileDuration:       0,
+		prevValues:            make(map[string]*BlockValues),
+		spanCount:             0,
+		spanActive:            &Flag{},
+		spanProfile:           nil,
+		spanStart:             0,
+		spanTimeout:           nil,
+	}
 
 	return br
 }
 
 func (br *BlockReporter) start() {
-	if br.started {
+	if !br.started.SetIfUnset() {
 		return
 	}
-	br.started = true
+
+	br.profileLock.Lock()
+	defer br.profileLock.Unlock()
 
 	br.reset()
-	br.profilerScheduler.start()
+
+	if br.agent.AutoProfiling {
+		br.spanTimer = br.agent.createTimer(0, time.Duration(br.SpanInterval)*time.Second, func() {
+			time.Sleep(time.Duration(rand.Int63n(br.SpanInterval-br.MaxSpanDuration)) * time.Second)
+			br.startProfiling(false)
+		})
+
+		br.reportTimer = br.agent.createTimer(0, time.Duration(br.ReportInterval)*time.Second, func() {
+			br.report()
+		})
+	}
 }
 
 func (br *BlockReporter) stop() {
-	if !br.started {
+	if !br.started.UnsetIfSet() {
 		return
 	}
-	br.started = false
 
-	br.profilerScheduler.stop()
+	if br.spanTimer != nil {
+		br.spanTimer.Stop()
+	}
+
+	if br.reportTimer != nil {
+		br.reportTimer.Stop()
+	}
 }
 
 func (br *BlockReporter) reset() {
 	br.blockProfile = newBreakdownNode("root")
 	br.blockTrace = newBreakdownNode("root")
+	br.profileStartTimestamp = time.Now().Unix()
 	br.profileDuration = 0
+	br.spanCount = 0
 }
 
-func (br *BlockReporter) record(duration int64) {
-	br.agent.log("Starting block profiler.")
-	p, e := br.readBlockProfile(duration)
-	if e != nil {
-		br.agent.error(e)
+func (br *BlockReporter) startProfiling(rateLimit bool) bool {
+	if !br.started.IsSet() {
+		return false
+	}
+
+	br.profileLock.Lock()
+	defer br.profileLock.Unlock()
+
+	if br.profileDuration > br.MaxProfileDuration*1e9 {
+		br.agent.log("Block profiler: max profiling duration reached.")
+		return false
+	}
+
+	if rateLimit && br.spanCount > br.MaxSpanCount {
+		br.agent.log("Block profiler: max profiling span count reached.")
+		return false
+	}
+
+	if !br.agent.profilerActive.SetIfUnset() {
+		br.agent.log("Block profiler: another profiler currently active.")
+		return false
+	}
+
+	br.agent.log("Starting Block profiler.")
+
+	err := br.startBlockProfiler()
+	if err != nil {
+		br.agent.profilerActive.Unset()
+		br.agent.error(err)
+		return false
+	}
+
+	br.spanTimeout = br.agent.createTimer(time.Duration(br.MaxSpanDuration)*time.Second, 0, func() {
+		br.stopProfiling()
+	})
+
+	br.spanCount++
+	br.spanActive.Set()
+	br.spanStart = time.Now().UnixNano()
+
+	return true
+}
+
+func (br *BlockReporter) stopProfiling() {
+	br.profileLock.Lock()
+	defer br.profileLock.Unlock()
+
+	if !br.spanActive.UnsetIfSet() {
+		return
+	}
+	br.spanTimeout.Stop()
+
+	defer br.agent.profilerActive.Unset()
+
+	p, err := br.stopBlockProfiler()
+	if err != nil {
+		br.agent.error(err)
 		return
 	}
 	if p == nil {
@@ -97,19 +182,32 @@ func (br *BlockReporter) record(duration int64) {
 	}
 	br.agent.log("Block profiler stopped.")
 
-	err := br.updateBlockProfile(p, duration)
-	if err != nil {
-		br.agent.error(err)
-		return
+	if uerr := br.updateBlockProfile(p); uerr != nil {
+		br.agent.error(uerr)
 	}
 
-	br.profileDuration += duration
+	br.profileDuration += time.Now().UnixNano() - br.spanStart
 }
 
 func (br *BlockReporter) report() {
-	durationSec := float64(br.profileDuration) / 1000
+	if !br.started.IsSet() {
+		return
+	}
 
-	br.blockProfile.normalize(durationSec)
+	br.profileLock.Lock()
+	defer br.profileLock.Unlock()
+
+	if !br.agent.AutoProfiling && br.profileStartTimestamp > time.Now().Unix()-br.ReportInterval {
+		return
+	}
+
+	if br.profileDuration == 0 {
+		return
+	}
+
+	br.agent.log("Block profiler: reporting profile.")
+
+	br.blockProfile.normalize(float64(br.profileDuration) / 1e9)
 	br.blockProfile.propagate()
 	br.blockProfile.filter(2, 1, math.Inf(0))
 
@@ -129,7 +227,7 @@ func (br *BlockReporter) report() {
 	br.reset()
 }
 
-func (br *BlockReporter) updateBlockProfile(p *profile.Profile, duration int64) error {
+func (br *BlockReporter) updateBlockProfile(p *profile.Profile) error {
 	contentionIndex := -1
 	delayIndex := -1
 	for i, s := range p.SampleType {
@@ -222,31 +320,24 @@ func (br *BlockReporter) getValueChange(key string, delay float64, contentions i
 	}
 }
 
-func (br *BlockReporter) readBlockProfile(duration int64) (*profile.Profile, error) {
-	prof := pprof.Lookup("block")
-	if prof == nil {
-		return nil, errors.New("No block profile found")
+func (br *BlockReporter) startBlockProfiler() error {
+	br.spanProfile = pprof.Lookup("block")
+	if br.spanProfile == nil {
+		return errors.New("No block profile found")
 	}
 
 	runtime.SetBlockProfileRate(1e6)
 
-	done := make(chan bool)
-	timer := time.NewTimer(time.Duration(duration) * time.Millisecond)
-	go func() {
-		defer br.agent.recoverAndLog()
+	return nil
+}
 
-		<-timer.C
-
-		runtime.SetBlockProfileRate(0)
-
-		done <- true
-	}()
-	<-done
+func (br *BlockReporter) stopBlockProfiler() (*profile.Profile, error) {
+	runtime.SetBlockProfileRate(0)
 
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 
-	err := prof.WriteTo(w, 0)
+	err := br.spanProfile.WriteTo(w, 0)
 	if err != nil {
 		return nil, err
 	}
