@@ -102,9 +102,9 @@ func main() {
 
 #### Manual profiling
 
-*The use of manual profiling is optional*
+*The use of manual profiling is optional.*
 
-Manual profiling is suitable for repeading code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile()` method can be used.
+Manual profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile()` method can be used.
 
 ```go
 // Use this method to instruct the agent to start and stop 
