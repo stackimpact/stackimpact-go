@@ -8,17 +8,19 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const AgentVersion = "2.2.0"
+const AgentVersion = "2.2.1"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
 
 type Agent struct {
 	randSource *rand.Rand
+	randLock   *sync.Mutex
 	nextId     int64
 	buildId    string
 	runId      string
@@ -54,6 +56,7 @@ type Agent struct {
 func NewAgent() *Agent {
 	a := &Agent{
 		randSource: rand.New(rand.NewSource(time.Now().UnixNano())),
+		randLock:   &sync.Mutex{},
 		nextId:     0,
 		runId:      "",
 		buildId:    "",
@@ -244,10 +247,17 @@ func (a *Agent) uuid() string {
 
 	uuid :=
 		strconv.FormatInt(time.Now().Unix(), 10) +
-			strconv.Itoa(a.randSource.Intn(1000000000)) +
+			strconv.FormatInt(a.random(1000000000), 10) +
 			strconv.FormatInt(n, 10)
 
 	return sha1String(uuid)
+}
+
+func (a *Agent) random(max int64) int64 {
+	a.randLock.Lock()
+	defer a.randLock.Unlock()
+
+	return a.randSource.Int63n(max)
 }
 
 func sha1String(s string) string {
