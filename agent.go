@@ -12,17 +12,17 @@ const ErrorGroupUnrecoveredPanics string = "Unrecovered panics"
 const ErrorGroupHandledExceptions string = "Handled exceptions"
 
 type Options struct {
-	DashboardAddress string
-	ProxyAddress     string
-	AgentKey         string
-	AppName          string
-	AppVersion       string
-	AppEnvironment   string
-	HostName         string
-	AutoProfiling    bool
-	Standalone       bool
-	Debug            bool
-	ProfileAgent     bool
+	DashboardAddress     string
+	ProxyAddress         string
+	AgentKey             string
+	AppName              string
+	AppVersion           string
+	AppEnvironment       string
+	HostName             string
+	DisableAutoProfiling bool
+	Standalone           bool
+	Debug                bool
+	ProfileAgent         bool
 }
 
 type Agent struct {
@@ -83,6 +83,10 @@ func (a *Agent) Start(options Options) {
 		a.internalAgent.HostName = options.HostName
 	}
 
+	if options.DisableAutoProfiling {
+		a.internalAgent.AutoProfiling = false
+	}
+
 	if options.DashboardAddress != "" {
 		a.internalAgent.DashboardAddress = options.DashboardAddress
 	}
@@ -92,11 +96,11 @@ func (a *Agent) Start(options Options) {
 	}
 
 	if options.Debug {
-		a.internalAgent.Debug = options.Debug
+		a.internalAgent.Debug = true
 	}
 
 	if options.ProfileAgent {
-		a.internalAgent.ProfileAgent = options.ProfileAgent
+		a.internalAgent.ProfileAgent = true
 	}
 
 	a.internalAgent.Start()

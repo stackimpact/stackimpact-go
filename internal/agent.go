@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.2.1"
+const AgentVersion = "2.2.2"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false

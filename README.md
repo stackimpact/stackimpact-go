@@ -67,7 +67,7 @@ All initialization options:
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
 * `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
-* `AutoProfiling` (Optional) If set to `false`, disables the default automatic profiling and reporting. `agent.Profile()` should be used instead. Useful for environments without support for timers or background tasks.
+* `AutoProfilingDisabled` (Optional) If set to `true`, disables the default automatic profiling and reporting. `agent.Profile()` should be used instead. Useful for environments without support for timers or background tasks.
 * `Debug` (Optional) Enables debug logging.
 
 
