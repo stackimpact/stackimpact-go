@@ -30,6 +30,7 @@ func TestRecordError(t *testing.T) {
 	errorGraphs := agent.errorReporter.errorGraphs
 
 	group1 := errorGraphs["group1"]
+	group1.evaluateCounter()
 	if group1.measurement != 200 {
 		t.Errorf("Measurement is wrong: %v", group1.measurement)
 	}

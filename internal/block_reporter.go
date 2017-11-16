@@ -197,8 +197,13 @@ func (br *BlockReporter) report() {
 	br.profileLock.Lock()
 	defer br.profileLock.Unlock()
 
-	if !br.agent.AutoProfiling && br.profileStartTimestamp > time.Now().Unix()-br.ReportInterval {
-		return
+	if !br.agent.AutoProfiling {
+		if br.profileStartTimestamp > time.Now().Unix()-br.ReportInterval {
+			return
+		} else if br.profileStartTimestamp < time.Now().Unix()-2*br.ReportInterval {
+			br.reset()
+			return
+		}
 	}
 
 	if br.profileDuration == 0 {

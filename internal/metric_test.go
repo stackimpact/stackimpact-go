@@ -90,6 +90,49 @@ func TestBreakdownDepth(t *testing.T) {
 	}
 }
 
+func TestBreakdownIncrement(t *testing.T) {
+	root := newBreakdownNode("root")
+
+	root.increment(12.3, 1)
+	root.increment(0, 0)
+	root.increment(5, 2)
+
+	if root.measurement != 17.3 {
+		t.Errorf("root measurement should be 17.3, but is %v", root.measurement)
+	}
+
+	if root.numSamples != 3 {
+		t.Errorf("root numSamples should be 3, but is %v", root.numSamples)
+	}
+}
+
+func TestBreakdownCounter(t *testing.T) {
+	root := newBreakdownNode("root")
+
+	child1 := newBreakdownNode("child1")
+	root.addChild(child1)
+
+	child2 := newBreakdownNode("child2")
+	root.addChild(child2)
+
+	child2child1 := newBreakdownNode("child2child1")
+	child2.addChild(child2child1)
+
+	child2child1.updateCounter(6, 1)
+	child2child1.updateCounter(4, 1)
+	child2child1.updateCounter(0, 0)
+	child2child1.evaluateCounter()
+	root.propagate()
+
+	if root.measurement != 10 {
+		t.Errorf("root measurement should be 10, but is %v", root.measurement)
+	}
+
+	if root.numSamples != 2 {
+		t.Errorf("root numSamples should be 2, but is %v", root.numSamples)
+	}
+}
+
 func TestBreakdownP95(t *testing.T) {
 	root := newBreakdownNode("root")
 
@@ -111,6 +154,10 @@ func TestBreakdownP95(t *testing.T) {
 	if root.measurement != 6.5 {
 		t.Errorf("root measurement should be 6, but is %v", root.measurement)
 	}
+
+	if root.numSamples != 3 {
+		t.Errorf("root numSamples should be 3, but is %v", root.numSamples)
+	}
 }
 
 func TestBreakdownP95Big(t *testing.T) {
@@ -123,32 +170,5 @@ func TestBreakdownP95Big(t *testing.T) {
 
 	if root.measurement < 200 || root.measurement > 250 {
 		t.Errorf("root measurement should be in [200, 250], but is %v", root.measurement)
-	}
-}
-
-func TestAddFloat64(t *testing.T) {
-	f := float64(10.3)
-	AddFloat64(&f, float64(5.2))
-
-	if f != 15.5 {
-		t.Errorf("f should be 15.5, but is %v", f)
-	}
-}
-
-func TestStoreFloat64(t *testing.T) {
-	f := float64(10.3)
-	StoreFloat64(&f, float64(5.2))
-
-	if f != 5.2 {
-		t.Errorf("f should be 5.2, but is %v", f)
-	}
-}
-
-func TestLoadFloat64(t *testing.T) {
-	f := float64(10.3)
-	l := LoadFloat64(&f)
-
-	if l != 10.3 {
-		t.Errorf("l should be 10.3, but is %v", f)
 	}
 }

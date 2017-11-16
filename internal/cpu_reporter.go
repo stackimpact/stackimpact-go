@@ -190,8 +190,13 @@ func (cr *CPUReporter) report() {
 	cr.profileLock.Lock()
 	defer cr.profileLock.Unlock()
 
-	if !cr.agent.AutoProfiling && cr.profileStartTimestamp > time.Now().Unix()-cr.ReportInterval {
-		return
+	if !cr.agent.AutoProfiling {
+		if cr.profileStartTimestamp > time.Now().Unix()-cr.ReportInterval {
+			return
+		} else if cr.profileStartTimestamp < time.Now().Unix()-2*cr.ReportInterval {
+			cr.reset()
+			return
+		}
 	}
 
 	if cr.profileDuration == 0 {

@@ -116,7 +116,7 @@ func simulateNetworkWait() {
 			fmt.Fprintf(w, "OK")
 		})
 
-		if err := http.ListenAndServe(":5000", nil); err != nil {
+		if err := http.ListenAndServe(":5002", nil); err != nil {
 			log.Fatal(err)
 			return
 		}
@@ -126,7 +126,7 @@ func simulateNetworkWait() {
 	for {
 		select {
 		case <-requestTicker.C:
-			res, err := http.Get("http://localhost:5000/test")
+			res, err := http.Get("http://localhost:5002/test")
 			if err == nil {
 				res.Body.Close()
 			}

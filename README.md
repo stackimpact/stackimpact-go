@@ -62,13 +62,16 @@ agent := stackimpact.Start(stackimpact.Options{
 All initialization options:
 
 * `AgentKey` (Required) The access key for communication with the StackImpact servers.
-* `AppName` (Required) A name to identify and group application data. Typically, a single codebase, deployable unit or executable module corresponds to one application.
+* `AppName` (Required) A name to identify and group application data. Typically, a single codebase, deployable unit or executable module corresponds to one application. Sometimes also referred as a service.
 * `AppVersion` (Optional) Sets application version, which can be used to associate profiling information with the source code release.
 * `AppEnvironment` (Optional) Used to differentiate applications in different environments.
 * `HostName` (Optional) By default, host name will be the OS hostname.
 * `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
-* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. `agent.Profile()` should be used instead. Useful for environments without support for timers or background tasks.
+* `HTTPClient` (Optional) An `http.Client` instance to be used instead of the default client for reporting data to Dashboard servers.
+* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. `agent.Profile()` and `agent.Report()` should be used instead. Useful for environments without support for timers or background tasks.
 * `Debug` (Optional) Enables debug logging.
+* `Logger` (Optional) A `log.Logger` instance to be used instead of default `STDOUT` logger.
+
 
 
 Example:

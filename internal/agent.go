@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"strconv"
 	"sync"
@@ -13,7 +15,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.2.2"
+const AgentVersion = "2.2.3"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -50,7 +52,9 @@ type Agent struct {
 	AutoProfiling    bool
 	Standalone       bool
 	Debug            bool
+	Logger           *log.Logger
 	ProfileAgent     bool
+	HTTPClient       *http.Client
 }
 
 func NewAgent() *Agent {
@@ -85,7 +89,9 @@ func NewAgent() *Agent {
 		AutoProfiling:    true,
 		Standalone:       false,
 		Debug:            false,
+		Logger:           log.New(os.Stdout, "", 0),
 		ProfileAgent:     false,
+		HTTPClient:       nil,
 	}
 
 	a.buildId = a.calculateProgramSHA1()
@@ -116,7 +122,12 @@ func (a *Agent) Start() {
 		if err != nil {
 			a.error(err)
 		}
-		a.HostName = hostName
+
+		if hostName != "" {
+			a.HostName = hostName
+		} else {
+			a.HostName = "unknown"
+		}
 	}
 
 	a.configLoader.start()
@@ -166,17 +177,6 @@ func (a *Agent) StopProfiling() {
 
 	a.cpuReporter.stopProfiling()
 	a.blockReporter.stopProfiling()
-
-	if !a.AutoProfiling {
-		a.cpuReporter.report()
-		a.allocationReporter.report()
-		a.blockReporter.report()
-
-		if !a.Standalone {
-			a.messageQueue.flush()
-			a.configLoader.load()
-		}
-	}
 }
 
 func (a *Agent) RecordSegment(name string, duration float64) {
@@ -203,6 +203,24 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 	a.errorReporter.recordError(group, err, skipFrames+1)
 }
 
+func (a *Agent) Report() {
+	defer a.recoverAndLog()
+
+	if !a.Standalone {
+		a.configLoader.load()
+	}
+
+	if !a.AutoProfiling {
+		a.cpuReporter.report()
+		a.allocationReporter.report()
+		a.blockReporter.report()
+
+		if !a.Standalone {
+			a.messageQueue.flush()
+		}
+	}
+}
+
 func (a *Agent) ReadMetrics() []interface{} {
 	if !a.Standalone {
 		return make([]interface{}, 0)
@@ -222,7 +240,7 @@ func (a *Agent) ReadMetrics() []interface{} {
 
 func (a *Agent) log(format string, values ...interface{}) {
 	if a.Debug {
-		fmt.Printf("["+time.Now().Format(time.StampMilli)+"]"+
+		a.Logger.Printf("["+time.Now().Format(time.StampMilli)+"]"+
 			" StackImpact "+AgentVersion+": "+
 			format+"\n", values...)
 	}
@@ -230,9 +248,9 @@ func (a *Agent) log(format string, values ...interface{}) {
 
 func (a *Agent) error(err error) {
 	if a.Debug {
-		fmt.Println("[" + time.Now().Format(time.StampMilli) + "]" +
+		a.Logger.Println("[" + time.Now().Format(time.StampMilli) + "]" +
 			" StackImpact " + AgentVersion + ": Error")
-		fmt.Println(err)
+		a.Logger.Println(err)
 	}
 }
 

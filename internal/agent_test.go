@@ -66,6 +66,7 @@ func TestReadMetrics(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	agent.StopProfiling()
+	agent.Report()
 
 	metrics := agent.ReadMetrics()
 

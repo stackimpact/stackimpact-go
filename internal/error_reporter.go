@@ -90,11 +90,11 @@ func callerFrames(skip int) []string {
 
 func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode, err error, frames []string) {
 	currentNode := errorGraph
-	currentNode.increment(1, 0)
+	currentNode.updateCounter(1, 0)
 	for i := len(frames) - 1; i >= 0; i-- {
 		f := frames[i]
 		currentNode = currentNode.findOrAddChild(f)
-		currentNode.increment(1, 0)
+		currentNode.updateCounter(1, 0)
 	}
 
 	message := err.Error()
@@ -109,7 +109,7 @@ func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode,
 			messageNode = currentNode.findOrAddChild("Other")
 		}
 	}
-	messageNode.increment(1, 0)
+	messageNode.updateCounter(1, 0)
 }
 
 func (er *ErrorReporter) recordError(group string, err error, skip int) {
@@ -160,6 +160,8 @@ func (er *ErrorReporter) report() {
 	er.recordLock.Unlock()
 
 	for _, errorGraph := range outgoing {
+		errorGraph.evaluateCounter()
+
 		metric := newMetric(er.agent, TypeState, CategoryErrorProfile, errorGraph.name, UnitNone)
 		metric.createMeasurement(TriggerTimer, errorGraph.measurement, 60, errorGraph)
 		er.agent.messageQueue.addMessage("metric", metric.toMap())

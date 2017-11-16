@@ -2,7 +2,9 @@ package stackimpact
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/stackimpact/stackimpact-go/internal"
 )
@@ -14,6 +16,7 @@ const ErrorGroupHandledExceptions string = "Handled exceptions"
 type Options struct {
 	DashboardAddress     string
 	ProxyAddress         string
+	HTTPClient           *http.Client
 	AgentKey             string
 	AppName              string
 	AppVersion           string
@@ -22,13 +25,15 @@ type Options struct {
 	DisableAutoProfiling bool
 	Standalone           bool
 	Debug                bool
+	Logger               *log.Logger
 	ProfileAgent         bool
 }
 
 type Agent struct {
 	internalAgent *internal.Agent
 
-	spanStarted int32
+	spanStarted   int32
+	reportStarted int32
 
 	// compatibility < 1.2.0
 	DashboardAddress string
@@ -43,6 +48,7 @@ func NewAgent() *Agent {
 	a := &Agent{
 		internalAgent: internal.NewAgent(),
 		spanStarted:   0,
+		reportStarted: 0,
 	}
 
 	return a
@@ -95,8 +101,16 @@ func (a *Agent) Start(options Options) {
 		a.internalAgent.ProxyAddress = options.ProxyAddress
 	}
 
+	if options.HTTPClient != nil {
+		a.internalAgent.HTTPClient = options.HTTPClient
+	}
+
 	if options.Debug {
 		a.internalAgent.Debug = true
+	}
+
+	if options.Logger != nil {
+		a.internalAgent.Logger = options.Logger
 	}
 
 	if options.ProfileAgent {
@@ -104,6 +118,26 @@ func (a *Agent) Start(options Options) {
 	}
 
 	a.internalAgent.Start()
+}
+
+// Update some options after the agent has already been started.
+// Only ProxyAddress, HTTPClient and Debug options are updatable.
+func (a *Agent) UpdateOptions(options Options) {
+	if options.ProxyAddress != "" {
+		a.internalAgent.ProxyAddress = options.ProxyAddress
+	}
+
+	if options.HTTPClient != nil {
+		a.internalAgent.HTTPClient = options.HTTPClient
+	}
+
+	if options.Debug {
+		a.internalAgent.Debug = true
+	}
+
+	if options.Logger != nil {
+		a.internalAgent.Logger = options.Logger
+	}
 }
 
 // DEPRECATED. Kept for compatibility with <1.2.0.
@@ -204,6 +238,28 @@ func (a *Agent) RecordAndRecoverPanic() {
 	if err := recover(); err != nil {
 		a.internalAgent.RecordError(ErrorGroupRecoveredPanics, err, 1)
 	}
+}
+
+// Reports profiles to the dashboard in manual profiling mode.
+// Only reports once every few minutes and only if the agent is active.
+func (a *Agent) Report() {
+	a.ReportWithHTTPClient(nil)
+}
+
+// Same as Report, but uses given http.Client.
+func (a *Agent) ReportWithHTTPClient(client *http.Client) {
+	if !atomic.CompareAndSwapInt32(&a.reportStarted, 0, 1) {
+		return
+	}
+	defer func() {
+		atomic.StoreInt32(&a.reportStarted, 0)
+	}()
+
+	if client != nil {
+		a.internalAgent.HTTPClient = client
+	}
+
+	a.internalAgent.Report()
 }
 
 // Returns reported metrics in standalone mode.

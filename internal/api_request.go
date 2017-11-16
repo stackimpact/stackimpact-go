@@ -64,7 +64,9 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 	ar.agent.log("Posting API request to %v", u)
 
 	var httpClient *http.Client
-	if ar.agent.ProxyAddress != "" {
+	if ar.agent.HTTPClient != nil {
+		httpClient = ar.agent.HTTPClient
+	} else if ar.agent.ProxyAddress != "" {
 		proxyURL, err := url.Parse(ar.agent.ProxyAddress)
 		if err != nil {
 			return nil, err
