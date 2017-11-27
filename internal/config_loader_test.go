@@ -27,8 +27,4 @@ func TestConfigLoad(t *testing.T) {
 	if !agent.config.isAgentEnabled() {
 		t.Errorf("Config loading wasn't successful")
 	}
-
-	if agent.cpuReporter.profile == nil {
-		t.Errorf("Did not call stop methods of reporters")
-	}
 }

@@ -8,8 +8,6 @@ import (
 	"math"
 	"runtime"
 	"runtime/pprof"
-	"sync"
-	"time"
 
 	"github.com/stackimpact/stackimpact-go/internal/pprof/profile"
 )
@@ -34,103 +32,60 @@ func readMemAlloc() float64 {
 	return float64(memStats.Alloc)
 }
 
-type AllocationReporter struct {
-	ReportInterval int64
-
-	agent       *Agent
-	started     *Flag
-	reportTimer *Timer
-
-	profileLock           *sync.Mutex
-	profileStartTimestamp int64
+type AllocationProfiler struct {
+	agent *Agent
 }
 
-func newAllocationReporter(agent *Agent) *AllocationReporter {
-	ar := &AllocationReporter{
-		ReportInterval: 120,
-
-		agent:       agent,
-		started:     &Flag{},
-		reportTimer: nil,
-
-		profileLock:           &sync.Mutex{},
-		profileStartTimestamp: 0,
+func newAllocationProfiler(agent *Agent) *AllocationProfiler {
+	ar := &AllocationProfiler{
+		agent: agent,
 	}
 
 	return ar
 }
 
-func (ar *AllocationReporter) start() {
-	if !ar.started.SetIfUnset() {
-		return
-	}
-
-	ar.profileLock.Lock()
-	defer ar.profileLock.Unlock()
-
-	ar.reset()
-
-	if ar.agent.AutoProfiling {
-		ar.reportTimer = ar.agent.createTimer(0, time.Duration(ar.ReportInterval)*time.Second, func() {
-			ar.report()
-		})
-	}
+func (ap *AllocationProfiler) reset() {
 }
 
-func (ar *AllocationReporter) stop() {
-	if !ar.started.UnsetIfSet() {
-		return
-	}
-
-	if ar.reportTimer != nil {
-		ar.reportTimer.Stop()
-	}
+func (ap *AllocationProfiler) startProfiler() error {
+	return nil
 }
 
-func (ar *AllocationReporter) reset() {
-	ar.profileStartTimestamp = time.Now().Unix()
+func (ap *AllocationProfiler) stopProfiler() error {
+	return nil
 }
 
-func (ar *AllocationReporter) report() {
-	if !ar.started.IsSet() {
-		return
-	}
-
-	ar.profileLock.Lock()
-	defer ar.profileLock.Unlock()
-
-	if !ar.agent.AutoProfiling && ar.profileStartTimestamp > time.Now().Unix()-ar.ReportInterval {
-		return
-	}
-
-	ar.agent.log("Allocation profiler: reporting profile.")
-
-	p, e := ar.readHeapProfile()
-	if e != nil {
-		ar.agent.error(e)
-		return
+func (ap *AllocationProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
+	p, err := ap.readHeapProfile()
+	if err != nil {
+		return nil, err
 	}
 	if p == nil {
-		return
+		return nil, errors.New("no profile returned")
 	}
 
-	// allocated size
-	if callGraph, err := ar.createAllocationCallGraph(p); err != nil {
-		ar.agent.error(err)
+	if callGraph, aerr := ap.createAllocationCallGraph(p); err != nil {
+		return nil, aerr
 	} else {
 		callGraph.propagate()
 		// filter calls with lower than 10KB
 		callGraph.filter(2, 10000, math.Inf(0))
 
-		metric := newMetric(ar.agent, TypeProfile, CategoryMemoryProfile, NameHeapAllocation, UnitByte)
-		metric.createMeasurement(TriggerTimer, callGraph.measurement, 0, callGraph)
-		ar.agent.messageQueue.addMessage("metric", metric.toMap())
-	}
+		data := []*ProfileData{
+			&ProfileData{
+				category:     CategoryMemoryProfile,
+				name:         NameHeapAllocation,
+				unit:         UnitByte,
+				unitInterval: 0,
+				profile:      callGraph,
+			},
+		}
 
-	ar.reset()
+		return data, nil
+	}
 }
 
-func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*BreakdownNode, error) {
+func (ap *AllocationProfiler) createAllocationCallGraph(p *profile.Profile) (*BreakdownNode, error) {
 	// find "inuse_space" type index
 	inuseSpaceTypeIndex := -1
 	for i, s := range p.SampleType {
@@ -157,7 +112,7 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 	rootNode := newBreakdownNode("root")
 
 	for _, s := range p.Sample {
-		if !ar.agent.ProfileAgent && isAgentStack(s) {
+		if !ap.agent.ProfileAgent && isAgentStack(s) {
 			continue
 		}
 
@@ -185,7 +140,7 @@ func (ar *AllocationReporter) createAllocationCallGraph(p *profile.Profile) (*Br
 	return rootNode, nil
 }
 
-func (ar *AllocationReporter) readHeapProfile() (*profile.Profile, error) {
+func (ap *AllocationProfiler) readHeapProfile() (*profile.Profile, error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 

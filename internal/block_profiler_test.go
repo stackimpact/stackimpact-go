@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestCreateBlockCallGraph(t *testing.T) {
+func TestCreateBlockProfile(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 	agent.ProfileAgent = true
@@ -32,35 +32,33 @@ func TestCreateBlockCallGraph(t *testing.T) {
 		done <- true
 	}()
 
-	agent.blockReporter.started.Set()
-	agent.blockReporter.reset()
-	agent.blockReporter.startProfiling(false)
+	blockProfiler := newBlockProfiler(agent)
+	blockProfiler.reset()
+	blockProfiler.startProfiler()
 	time.Sleep(500 * time.Millisecond)
-	agent.blockReporter.stopProfiling()
-
-	blockCallGraph := agent.blockReporter.blockProfile
-	blockCallGraph.normalize(0.5)
-	blockCallGraph.propagate()
+	blockProfiler.stopProfiler()
+	data, _ := blockProfiler.buildProfile(500 * 1e6)
+	blockProfile := data[0].profile
 
 	if false {
-		fmt.Printf("WAIT TIME: %v\n", blockCallGraph.measurement)
-		fmt.Printf("CALL GRAPH: %v\n", blockCallGraph.printLevel(0))
+		fmt.Printf("WAIT TIME: %v\n", blockProfile.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", blockProfile.printLevel(0))
 	}
-	if blockCallGraph.measurement < 100 {
-		t.Errorf("Wait time is too low: %v", blockCallGraph.measurement)
+	if blockProfile.measurement < 100 {
+		t.Errorf("Wait time is too low: %v", blockProfile.measurement)
 	}
-	if blockCallGraph.numSamples < 1 {
+	if blockProfile.numSamples < 1 {
 		t.Error("Number of samples should be > 0")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", blockCallGraph.toMap()), "TestCreateBlockCallGraph") {
+	if !strings.Contains(fmt.Sprintf("%v", blockProfile.toMap()), "TestCreateBlockProfile") {
 		t.Error("The test function is not found in the profile")
 	}
 
 	<-done
 }
 
-func TestCreateBlockTraceCallGraph(t *testing.T) {
+func TestCreateBlockTraceProfile(t *testing.T) {
 	agent := NewAgent()
 	agent.Debug = true
 	agent.ProfileAgent = true
@@ -104,29 +102,26 @@ func TestCreateBlockTraceCallGraph(t *testing.T) {
 		}
 	}()
 
-	agent.blockReporter.started.Set()
-	agent.blockReporter.reset()
-	agent.blockReporter.startProfiling(false)
+	blockProfiler := newBlockProfiler(agent)
+	blockProfiler.reset()
+	blockProfiler.startProfiler()
 	time.Sleep(500 * time.Millisecond)
-	agent.blockReporter.stopProfiling()
-
-	blockTraceCallGraph := agent.blockReporter.blockTrace
-	blockTraceCallGraph.evaluateP95()
-	blockTraceCallGraph.propagate()
-	blockTraceCallGraph.round()
+	blockProfiler.stopProfiler()
+	data, _ := blockProfiler.buildProfile(500 * 1e6)
+	blockTrace := data[1].profile
 
 	if false {
-		fmt.Printf("LATENCY: %v\n", blockTraceCallGraph.measurement)
-		fmt.Printf("CALL GRAPH: %v\n", blockTraceCallGraph.printLevel(0))
+		fmt.Printf("LATENCY: %v\n", blockTrace.measurement)
+		fmt.Printf("CALL GRAPH: %v\n", blockTrace.printLevel(0))
 	}
-	if blockTraceCallGraph.measurement < 5 {
-		t.Errorf("Block trace value is too low: %v", blockTraceCallGraph.measurement)
+	if blockTrace.measurement < 5 {
+		t.Errorf("Block trace value is too low: %v", blockTrace.measurement)
 	}
-	if blockTraceCallGraph.numSamples < 1 {
+	if blockTrace.numSamples < 1 {
 		t.Error("Number of samples should be > 0")
 	}
 
-	if !strings.Contains(fmt.Sprintf("%v", blockTraceCallGraph.toMap()), "TestCreateBlockTraceCallGraph") {
+	if !strings.Contains(fmt.Sprintf("%v", blockTrace.toMap()), "TestCreateBlockTraceProfile") {
 		t.Error("The test function is not found in the profile")
 	}
 }

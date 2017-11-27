@@ -22,10 +22,12 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 	runtime.GC()
 	runtime.GC()
 
-	p, _ := agent.allocationReporter.readHeapProfile()
+	allocationProfiler := newAllocationProfiler(agent)
+
+	p, _ := allocationProfiler.readHeapProfile()
 
 	// size
-	callGraph, err := agent.allocationReporter.createAllocationCallGraph(p)
+	callGraph, err := allocationProfiler.createAllocationCallGraph(p)
 	if err != nil {
 		t.Error(err)
 		return

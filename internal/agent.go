@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.2.3"
+const AgentVersion = "2.3.0"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -33,9 +33,9 @@ type Agent struct {
 	configLoader       *ConfigLoader
 	messageQueue       *MessageQueue
 	processReporter    *ProcessReporter
-	cpuReporter        *CPUReporter
-	allocationReporter *AllocationReporter
-	blockReporter      *BlockReporter
+	cpuReporter        *ProfileReporter
+	allocationReporter *ProfileReporter
+	blockReporter      *ProfileReporter
 	segmentReporter    *SegmentReporter
 	errorReporter      *ErrorReporter
 
@@ -102,9 +102,37 @@ func NewAgent() *Agent {
 	a.configLoader = newConfigLoader(a)
 	a.messageQueue = newMessageQueue(a)
 	a.processReporter = newProcessReporter(a)
-	a.cpuReporter = newCPUReporter(a)
-	a.allocationReporter = newAllocationReporter(a)
-	a.blockReporter = newBlockReporter(a)
+
+	cpuProfiler := newCPUProfiler(a)
+	cpuProfilerConfig := &ProfilerConfig{
+		logPrefix:          "CPU profiler",
+		maxProfileDuration: 20,
+		maxSpanDuration:    2,
+		maxSpanCount:       30,
+		spanInterval:       8,
+		reportInterval:     120,
+	}
+	a.cpuReporter = newProfileReporter(a, cpuProfiler, cpuProfilerConfig)
+
+	allocationProfiler := newAllocationProfiler(a)
+	allocationProfilerConfig := &ProfilerConfig{
+		logPrefix:      "Allocation profiler",
+		reportOnly:     true,
+		reportInterval: 120,
+	}
+	a.allocationReporter = newProfileReporter(a, allocationProfiler, allocationProfilerConfig)
+
+	blockProfiler := newBlockProfiler(a)
+	blockProfilerConfig := &ProfilerConfig{
+		logPrefix:          "Block profiler",
+		maxProfileDuration: 20,
+		maxSpanDuration:    4,
+		maxSpanCount:       30,
+		spanInterval:       16,
+		reportInterval:     120,
+	}
+	a.blockReporter = newProfileReporter(a, blockProfiler, blockProfilerConfig)
+
 	a.segmentReporter = newSegmentReporter(a)
 	a.errorReporter = newErrorReporter(a)
 
