@@ -180,7 +180,7 @@ func simulateLockWait() {
 
 func simulateManualProfiling() {
 	for {
-		span := agent.Profile()
+		span := agent.Profile("Workload1")
 		fmt.Println("Manual profile started")
 
 		// wait

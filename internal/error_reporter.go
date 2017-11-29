@@ -1,8 +1,6 @@
 package internal
 
 import (
-	"fmt"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -65,29 +63,6 @@ func (er *ErrorReporter) stop() {
 	}
 }
 
-func callerFrames(skip int) []string {
-	stack := make([]uintptr, 50)
-	runtime.Callers(skip+2, stack)
-
-	frames := make([]string, 0)
-	for _, pc := range stack {
-		if pc != 0 {
-			if fn := runtime.FuncForPC(pc); fn != nil {
-				funcName := fn.Name()
-
-				if funcName == "runtime.goexit" {
-					continue
-				}
-
-				fileName, lineNumber := fn.FileLine(pc)
-				frames = append(frames, fmt.Sprintf("%v (%v:%v)", fn.Name(), fileName, lineNumber))
-			}
-		}
-	}
-
-	return frames
-}
-
 func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode, err error, frames []string) {
 	currentNode := errorGraph
 	currentNode.updateCounter(1, 0)
@@ -117,7 +92,7 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 		return
 	}
 
-	frames := callerFrames(skip + 1)
+	frames := callerFrames(skip+1, 25)
 
 	if err == nil {
 		er.agent.log("Missing error object")

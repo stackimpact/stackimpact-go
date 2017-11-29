@@ -37,7 +37,7 @@ func (cl *ConfigLoader) start() {
 		return
 	}
 
-	if cl.agent.AutoProfiling && !cl.agent.Standalone {
+	if cl.agent.AutoProfiling {
 		cl.loadTimer = cl.agent.createTimer(time.Duration(cl.LoadDelay)*time.Second, time.Duration(cl.LoadInterval)*time.Second, func() {
 			cl.load()
 		})

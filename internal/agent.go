@@ -50,7 +50,6 @@ type Agent struct {
 	AppEnvironment   string
 	HostName         string
 	AutoProfiling    bool
-	Standalone       bool
 	Debug            bool
 	Logger           *log.Logger
 	ProfileAgent     bool
@@ -87,7 +86,6 @@ func NewAgent() *Agent {
 		AppEnvironment:   "",
 		HostName:         "",
 		AutoProfiling:    true,
-		Standalone:       false,
 		Debug:            false,
 		Logger:           log.New(os.Stdout, "", 0),
 		ProfileAgent:     false,
@@ -190,13 +188,13 @@ func (a *Agent) Disable() {
 	}
 }
 
-func (a *Agent) StartProfiling() bool {
+func (a *Agent) StartProfiling(label string) bool {
 	defer a.recoverAndLog()
 
 	if rand.Intn(2) == 0 {
-		return a.cpuReporter.startProfiling(true) || a.blockReporter.startProfiling(true)
+		return a.cpuReporter.startProfiling(label, true) || a.blockReporter.startProfiling(label, true)
 	} else {
-		return a.blockReporter.startProfiling(true) || a.cpuReporter.startProfiling(true)
+		return a.blockReporter.startProfiling(label, true) || a.cpuReporter.startProfiling(label, true)
 	}
 }
 
@@ -234,36 +232,15 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 func (a *Agent) Report() {
 	defer a.recoverAndLog()
 
-	if !a.Standalone {
-		a.configLoader.load()
-	}
+	a.configLoader.load()
 
 	if !a.AutoProfiling {
 		a.cpuReporter.report()
 		a.allocationReporter.report()
 		a.blockReporter.report()
 
-		if !a.Standalone {
-			a.messageQueue.flush()
-		}
+		a.messageQueue.flush()
 	}
-}
-
-func (a *Agent) ReadMetrics() []interface{} {
-	if !a.Standalone {
-		return make([]interface{}, 0)
-	}
-
-	messages := a.messageQueue.read()
-
-	metrics := make([]interface{}, 0)
-	for _, message := range messages {
-		if message.topic == "metric" {
-			metrics = append(metrics, message.content)
-		}
-	}
-
-	return metrics
 }
 
 func (a *Agent) log(format string, values ...interface{}) {

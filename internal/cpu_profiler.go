@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -212,10 +211,8 @@ func symbolizeProfile(p *profile.Profile) error {
 	return nil
 }
 
-var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go", "internal")
-
 func isAgentStack(sample *profile.Sample) bool {
-	return stackContains(sample, "", agentPath)
+	return stackContains(sample, "", agentPathInternal)
 }
 
 func stackContains(sample *profile.Sample, funcNameTest string, fileNameTest string) bool {

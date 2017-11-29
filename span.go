@@ -6,13 +6,15 @@ import (
 
 type Span struct {
 	agent   *Agent
+	label   string
 	started bool
 	active  bool
 }
 
-func newSpan(agent *Agent) *Span {
+func newSpan(agent *Agent, label string) *Span {
 	s := &Span{
 		agent:   agent,
+		label:   label,
 		started: false,
 		active:  false,
 	}
@@ -23,7 +25,7 @@ func newSpan(agent *Agent) *Span {
 func (s *Span) start() {
 	s.started = atomic.CompareAndSwapInt32(&s.agent.spanStarted, 0, 1)
 	if s.started {
-		s.active = s.agent.internalAgent.StartProfiling()
+		s.active = s.agent.internalAgent.StartProfiling(s.label)
 	}
 }
 

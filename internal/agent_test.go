@@ -42,7 +42,7 @@ func TestStartStopProfiling(t *testing.T) {
 	agent.AutoProfiling = false
 
 	agent.cpuReporter.start()
-	agent.StartProfiling()
+	agent.StartProfiling("")
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -50,28 +50,6 @@ func TestStartStopProfiling(t *testing.T) {
 
 	if agent.cpuReporter.profileDuration == 0 {
 		t.Error("profileDuration should be > 0")
-	}
-}
-
-func TestReadMetrics(t *testing.T) {
-	agent := NewAgent()
-	agent.Debug = true
-	agent.AutoProfiling = false
-	agent.Standalone = true
-
-	agent.cpuReporter.start()
-	agent.cpuReporter.profileStartTimestamp = time.Now().Unix() - 130
-	agent.StartProfiling()
-
-	time.Sleep(50 * time.Millisecond)
-
-	agent.StopProfiling()
-	agent.Report()
-
-	metrics := agent.ReadMetrics()
-
-	if len(metrics) == 0 {
-		t.Error("metrics length should be > 0")
 	}
 }
 

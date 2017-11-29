@@ -50,7 +50,7 @@ func (mq *MessageQueue) start() {
 		return
 	}
 
-	if mq.agent.AutoProfiling && !mq.agent.Standalone {
+	if mq.agent.AutoProfiling {
 		mq.flushTimer = mq.agent.createTimer(0, time.Duration(mq.FlushInterval)*time.Second, func() {
 			mq.flush()
 		})
