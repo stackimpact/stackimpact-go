@@ -90,7 +90,7 @@ func (bp *BlockProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
 			name:         NameBlockingCallTimes,
 			unit:         UnitMillisecond,
 			unitInterval: 0,
-			profile:      bp.blockProfile,
+			profile:      bp.blockTrace,
 		},
 	}
 
