@@ -103,11 +103,11 @@ func main() {
 }
 ```
 
-#### Manual profiling
+#### Workload profiling
 
-*The use of manual profiling is optional.*
+*The use of workload profiling is optional.*
 
-Manual profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile(label)` method can be used.
+Workload profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile(label)` method can be used.
 
 ```go
 // Use this method to instruct the agent to start and stop 
