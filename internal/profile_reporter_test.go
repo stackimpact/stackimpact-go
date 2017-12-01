@@ -61,7 +61,7 @@ func TestMaxDuration(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling("", true)
+	rep.startProfiling(true)
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
@@ -74,7 +74,7 @@ func TestMaxDuration(t *testing.T) {
 
 	rep.profileDuration = 21 * 1e9
 
-	rep.startProfiling("", true)
+	rep.startProfiling(true)
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -100,14 +100,14 @@ func TestMaxSpanCount(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling("", true)
+	rep.startProfiling(true)
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
 		t.Errorf("Start count is not 1")
 	}
 
-	rep.startProfiling("", true)
+	rep.startProfiling(true)
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -133,7 +133,7 @@ func TestReportProfile(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling("", true)
+	rep.startProfiling(true)
 	time.Sleep(10 * time.Millisecond)
 	rep.stopProfiling()
 
@@ -141,63 +141,5 @@ func TestReportProfile(t *testing.T) {
 
 	if !prof.closed {
 		t.Error("Should be closed")
-	}
-}
-
-func TestAddLabel(t *testing.T) {
-	agent := NewAgent()
-	agent.Debug = true
-
-	prof := &TestProfiler{}
-
-	conf := &ProfilerConfig{
-		logPrefix:          "Test profiler",
-		maxProfileDuration: 20,
-		maxSpanDuration:    2,
-		maxSpanCount:       30,
-		spanInterval:       8,
-		reportInterval:     120,
-	}
-
-	rep := newProfileReporter(agent, prof, conf)
-	rep.start()
-
-	rep.startProfiling("label1", true)
-	rep.stopProfiling()
-
-	if _, exists := rep.labels["label1"]; !exists {
-		t.Error("Label not added")
-	}
-}
-
-func TestLabelSubprofiles(t *testing.T) {
-	agent := NewAgent()
-	agent.Debug = true
-
-	prof := &TestProfiler{}
-
-	conf := &ProfilerConfig{
-		logPrefix:          "Test profiler",
-		maxProfileDuration: 20,
-		maxSpanDuration:    2,
-		maxSpanCount:       30,
-		spanInterval:       8,
-		reportInterval:     120,
-	}
-
-	rep := newProfileReporter(agent, prof, conf)
-	rep.start()
-
-	rep.labels["label1"] = true
-	rep.frameLabels["frame1"] = "label1"
-
-	root := newBreakdownNode("root")
-	frame1 := newBreakdownNode("frame1")
-	root.addChild(frame1)
-
-	rep.labelSubprofiles(root)
-
-	if len(frame1.labels) == 0 || frame1.labels[0] != "label1" {
-		t.Error("Frame node not labeled")
 	}
 }

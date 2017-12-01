@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.1"
+const AgentVersion = "2.3.2"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentStarted bool = false
@@ -188,13 +188,13 @@ func (a *Agent) Disable() {
 	}
 }
 
-func (a *Agent) StartProfiling(label string) bool {
+func (a *Agent) StartProfiling() bool {
 	defer a.recoverAndLog()
 
 	if rand.Intn(2) == 0 {
-		return a.cpuReporter.startProfiling(label, true) || a.blockReporter.startProfiling(label, true)
+		return a.cpuReporter.startProfiling(true) || a.blockReporter.startProfiling(true)
 	} else {
-		return a.blockReporter.startProfiling(label, true) || a.cpuReporter.startProfiling(label, true)
+		return a.blockReporter.startProfiling(true) || a.cpuReporter.startProfiling(true)
 	}
 }
 

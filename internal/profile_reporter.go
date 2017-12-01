@@ -3,12 +3,10 @@ package internal
 import (
 	"math/rand"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
 
-var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
 var agentPathInternal = filepath.Join("github.com", "stackimpact", "stackimpact-go", "internal")
 
 type ProfilerConfig struct {
@@ -50,8 +48,6 @@ type ProfileReporter struct {
 	spanActive            *Flag
 	spanStart             int64
 	spanTimeout           *Timer
-	labels                map[string]bool
-	frameLabels           map[string]string
 }
 
 func newProfileReporter(agent *Agent, profiler Profiler, config *ProfilerConfig) *ProfileReporter {
@@ -69,8 +65,6 @@ func newProfileReporter(agent *Agent, profiler Profiler, config *ProfilerConfig)
 		spanActive:            &Flag{},
 		spanStart:             0,
 		spanTimeout:           nil,
-		labels:                make(map[string]bool),
-		frameLabels:           make(map[string]string),
 	}
 
 	return pr
@@ -90,7 +84,7 @@ func (pr *ProfileReporter) start() {
 		if !pr.config.reportOnly {
 			pr.spanTimer = pr.agent.createTimer(0, time.Duration(pr.config.spanInterval)*time.Second, func() {
 				time.Sleep(time.Duration(rand.Int63n(pr.config.spanInterval-pr.config.maxSpanDuration)) * time.Second)
-				pr.startProfiling("", false)
+				pr.startProfiling(false)
 			})
 		}
 
@@ -121,7 +115,7 @@ func (pr *ProfileReporter) reset() {
 	pr.spanCount = 0
 }
 
-func (pr *ProfileReporter) startProfiling(label string, rateLimit bool) bool {
+func (pr *ProfileReporter) startProfiling(rateLimit bool) bool {
 	if !pr.started.IsSet() {
 		return false
 	}
@@ -145,8 +139,6 @@ func (pr *ProfileReporter) startProfiling(label string, rateLimit bool) bool {
 	}
 
 	pr.agent.log("%v: starting profiler.", pr.config.logPrefix)
-
-	pr.addLabel(label)
 
 	err := pr.profiler.startProfiler()
 	if err != nil {
@@ -217,68 +209,10 @@ func (pr *ProfileReporter) report() {
 	}
 
 	for _, d := range profileData {
-		if d.profile != nil && len(pr.frameLabels) > 0 {
-			pr.labelSubprofiles(d.profile)
-		}
-
 		metric := newMetric(pr.agent, TypeProfile, d.category, d.name, d.unit)
 		metric.createMeasurement(TriggerTimer, d.profile.measurement, d.unitInterval, d.profile)
 		pr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
 	pr.reset()
-}
-
-func (pr *ProfileReporter) labelSubprofiles(node *BreakdownNode) {
-	if node == nil || node.name == "" {
-		return
-	}
-
-	if label, exists := pr.frameLabels[node.name]; exists {
-		node.addLabel(label)
-		return
-	}
-
-	for _, child := range node.children {
-		pr.labelSubprofiles(child)
-	}
-}
-
-func (pr *ProfileReporter) addLabel(label string) {
-	if label == "" {
-		return
-	}
-
-	if _, exists := pr.labels[label]; exists {
-		return
-	}
-
-	if len(pr.frameLabels) > 250 {
-		pr.agent.log("Too many labels, potentially wrong profile call usage")
-		return
-	}
-
-	frames := callerFrames(1, 25)
-
-	entryFrame := ""
-	found := false
-	for _, f := range frames {
-		if found {
-			entryFrame = f
-			break
-		}
-
-		if !strings.Contains(f, agentPath) {
-			found = true
-		}
-	}
-
-	if entryFrame == "" {
-		pr.agent.log("Problem finding entry frame for label: %v", label)
-		pr.labels[label] = true
-		return
-	}
-
-	pr.labels[label] = true
-	pr.frameLabels[entryFrame] = label
 }

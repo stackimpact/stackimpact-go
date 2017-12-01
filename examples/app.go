@@ -178,10 +178,10 @@ func simulateLockWait() {
 	}
 }
 
-func simulateManualProfiling() {
+func simulateWorkloadProfiling() {
 	for {
-		span := agent.Profile("Workload1")
-		fmt.Println("Manual profile started")
+		span := agent.Profile()
+		fmt.Println("Workload profile started")
 
 		// wait
 		time.Sleep(time.Duration(10+rand.Intn(10)) * time.Millisecond)
@@ -192,7 +192,7 @@ func simulateManualProfiling() {
 		}
 
 		span.Stop()
-		fmt.Println("Manual profile stopped")
+		fmt.Println("Workload profile stopped")
 
 		time.Sleep(20 * time.Second)
 	}
@@ -316,7 +316,7 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
-	go simulateManualProfiling()
+	go simulateWorkloadProfiling()
 	go simulateSegments()
 	go simulateHandlerSegments()
 	go simulateErrors()

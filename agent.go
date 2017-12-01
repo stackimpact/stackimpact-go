@@ -154,11 +154,9 @@ func (a *Agent) Configure(agentKey string, appName string) {
 // profiling. It does not guarantee that any profiler will be
 // started. The decision is made by the agent based on the
 // overhead constraints. The method returns Span object, on
-// which the Stop() method should be called. The label
-// parameter is used to label sub-profiles that correspond
-// to the workload, enclosed by this function.
-func (a *Agent) Profile(label string) *Span {
-	s := newSpan(a, label)
+// which the Stop() method should be called.
+func (a *Agent) Profile() *Span {
+	s := newSpan(a)
 	s.start()
 
 	return s
@@ -168,7 +166,7 @@ func (a *Agent) Profile(label string) *Span {
 // by wrapping http.HandleFunc method parameters.
 func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
 	return pattern, func(w http.ResponseWriter, r *http.Request) {
-		span := a.Profile(pattern)
+		span := a.Profile()
 		defer span.Stop()
 
 		handlerFunc(w, r)
@@ -179,7 +177,7 @@ func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.Respons
 // by wrapping http.Handle method parameters.
 func (a *Agent) ProfileHandler(pattern string, handler http.Handler) (string, http.Handler) {
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		span := a.Profile(pattern)
+		span := a.Profile()
 		defer span.Stop()
 
 		handler.ServeHTTP(w, r)
