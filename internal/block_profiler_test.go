@@ -37,7 +37,7 @@ func TestCreateBlockProfile(t *testing.T) {
 	blockProfiler.startProfiler()
 	time.Sleep(500 * time.Millisecond)
 	blockProfiler.stopProfiler()
-	data, _ := blockProfiler.buildProfile(500 * 1e6)
+	data, _ := blockProfiler.buildProfile(500*1e6, nil)
 	blockProfile := data[0].profile
 
 	if false {
@@ -107,7 +107,7 @@ func TestCreateBlockTraceProfile(t *testing.T) {
 	blockProfiler.startProfiler()
 	time.Sleep(500 * time.Millisecond)
 	blockProfiler.stopProfiler()
-	data, _ := blockProfiler.buildProfile(500 * 1e6)
+	data, _ := blockProfiler.buildProfile(500*1e6, nil)
 	blockTrace := data[1].profile
 
 	if false {

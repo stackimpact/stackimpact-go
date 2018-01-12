@@ -1,146 +1,67 @@
-// Copyright 2014 Google Inc. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package profile
 
 import (
-	"bytes"
+	"reflect"
 	"testing"
-
-	"github.com/google/pprof/internal/proftest"
 )
 
-var testM = []*Mapping{
-	{
-		ID:              1,
-		Start:           1,
-		Limit:           10,
-		Offset:          0,
-		File:            "file1",
-		BuildID:         "buildid1",
-		HasFunctions:    true,
-		HasFilenames:    true,
-		HasLineNumbers:  true,
-		HasInlineFrames: true,
-	},
-	{
-		ID:              2,
-		Start:           10,
-		Limit:           30,
-		Offset:          9,
-		File:            "file1",
-		BuildID:         "buildid2",
-		HasFunctions:    true,
-		HasFilenames:    true,
-		HasLineNumbers:  true,
-		HasInlineFrames: true,
-	},
-}
+func TestPackedEncoding(t *testing.T) {
 
-var testF = []*Function{
-	{ID: 1, Name: "func1", SystemName: "func1", Filename: "file1"},
-	{ID: 2, Name: "func2", SystemName: "func2", Filename: "file1"},
-	{ID: 3, Name: "func3", SystemName: "func3", Filename: "file2"},
-}
-
-var testL = []*Location{
-	{
-		ID:      1,
-		Address: 1,
-		Mapping: testM[0],
-		Line: []Line{
-			{
-				Function: testF[0],
-				Line:     2,
-			},
-			{
-				Function: testF[1],
-				Line:     2222222,
-			},
-		},
-	},
-	{
-		ID:      2,
-		Mapping: testM[1],
-		Address: 11,
-		Line: []Line{
-			{
-				Function: testF[2],
-				Line:     2,
-			},
-		},
-	},
-	{
-		ID:      3,
-		Mapping: testM[1],
-		Address: 12,
-	},
-}
-
-var all = &Profile{
-	PeriodType:    &ValueType{Type: "cpu", Unit: "milliseconds"},
-	Period:        10,
-	DurationNanos: 10e9,
-	SampleType: []*ValueType{
-		{Type: "cpu", Unit: "cycles"},
-		{Type: "object", Unit: "count"},
-	},
-	Sample: []*Sample{
-		{
-			Location: []*Location{testL[0], testL[1], testL[2], testL[1], testL[1]},
-			Label: map[string][]string{
-				"key1": []string{"value1"},
-				"key2": []string{"value2"},
-			},
-			Value: []int64{10, 20},
-		},
-		{
-			Location: []*Location{testL[1], testL[2], testL[0], testL[1]},
-			Value:    []int64{30, 40},
-			Label: map[string][]string{
-				"key1": []string{"value1"},
-				"key2": []string{"value2"},
-			},
-			NumLabel: map[string][]int64{
-				"key1": []int64{1, 2},
-				"key2": []int64{3, 4},
-			},
-		},
-	},
-	Function: testF,
-	Mapping:  testM,
-	Location: testL,
-	Comments: []string{"Comment 1", "Comment 2"},
-}
-
-func TestMarshalUnmarshal(t *testing.T) {
-	// Write the profile, parse it, and ensure they're equal.
-	buf := bytes.NewBuffer(nil)
-	all.Write(buf)
-	all2, err := Parse(buf)
-	if err != nil {
-		t.Fatal(err)
+	type testcase struct {
+		uint64s []uint64
+		int64s  []int64
+		encoded []byte
 	}
-
-	js1 := proftest.EncodeJSON(&all)
-	js2 := proftest.EncodeJSON(&all2)
-	if string(js1) != string(js2) {
-		t.Errorf("profiles differ")
-		d, err := proftest.Diff(js1, js2)
-		if err != nil {
-			t.Fatal(err)
+	for i, tc := range []testcase{
+		{
+			[]uint64{0, 1, 10, 100, 1000, 10000},
+			[]int64{1000, 0, 1000},
+			[]byte{10, 8, 0, 1, 10, 100, 232, 7, 144, 78, 18, 5, 232, 7, 0, 232, 7},
+		},
+		{
+			[]uint64{10000},
+			nil,
+			[]byte{8, 144, 78},
+		},
+		{
+			nil,
+			[]int64{-10000},
+			[]byte{16, 240, 177, 255, 255, 255, 255, 255, 255, 255, 1},
+		},
+	} {
+		source := &packedInts{tc.uint64s, tc.int64s}
+		if got, want := marshal(source), tc.encoded; !reflect.DeepEqual(got, want) {
+			t.Errorf("failed encode %d, got %v, want %v", i, got, want)
 		}
-		t.Error("\n" + string(d))
+
+		dest := new(packedInts)
+		if err := unmarshal(tc.encoded, dest); err != nil {
+			t.Errorf("failed decode %d: %v", i, err)
+			continue
+		}
+		if got, want := dest.uint64s, tc.uint64s; !reflect.DeepEqual(got, want) {
+			t.Errorf("failed decode uint64s %d, got %v, want %v", i, got, want)
+		}
+		if got, want := dest.int64s, tc.int64s; !reflect.DeepEqual(got, want) {
+			t.Errorf("failed decode int64s %d, got %v, want %v", i, got, want)
+		}
 	}
+}
+
+type packedInts struct {
+	uint64s []uint64
+	int64s  []int64
+}
+
+func (u *packedInts) decoder() []decoder {
+	return []decoder{
+		nil,
+		func(b *buffer, m message) error { return decodeUint64s(b, &m.(*packedInts).uint64s) },
+		func(b *buffer, m message) error { return decodeInt64s(b, &m.(*packedInts).int64s) },
+	}
+}
+
+func (u *packedInts) encode(b *buffer) {
+	encodeUint64s(b, 1, u.uint64s)
+	encodeInt64s(b, 2, u.int64s)
 }

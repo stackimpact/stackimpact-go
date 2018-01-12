@@ -9,14 +9,19 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const AgentVersion = "2.3.2"
+const AgentVersion = "2.3.3"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
+
+var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
+var agentPathInternal = filepath.Join("github.com", "stackimpact", "stackimpact-go", "internal")
+var agentPathExamples = filepath.Join("github.com", "stackimpact", "stackimpact-go", "examples")
 
 var agentStarted bool = false
 
@@ -188,13 +193,13 @@ func (a *Agent) Disable() {
 	}
 }
 
-func (a *Agent) StartProfiling() bool {
+func (a *Agent) StartProfiling(workload string) bool {
 	defer a.recoverAndLog()
 
 	if rand.Intn(2) == 0 {
-		return a.cpuReporter.startProfiling(true) || a.blockReporter.startProfiling(true)
+		return a.cpuReporter.startProfiling(true, workload) || a.blockReporter.startProfiling(true, workload)
 	} else {
-		return a.blockReporter.startProfiling(true) || a.cpuReporter.startProfiling(true)
+		return a.blockReporter.startProfiling(true, workload) || a.cpuReporter.startProfiling(true, workload)
 	}
 }
 

@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,20 +16,22 @@ import (
 )
 
 type CPUProfiler struct {
-	agent      *Agent
-	profile    *BreakdownNode
-	profWriter *bufio.Writer
-	profBuffer *bytes.Buffer
-	startNano  int64
+	agent         *Agent
+	profile       *BreakdownNode
+	labelProfiles map[string]*BreakdownNode
+	profWriter    *bufio.Writer
+	profBuffer    *bytes.Buffer
+	startNano     int64
 }
 
 func newCPUProfiler(agent *Agent) *CPUProfiler {
 	cp := &CPUProfiler{
-		agent:      agent,
-		profile:    nil,
-		profWriter: nil,
-		profBuffer: nil,
-		startNano:  0,
+		agent:         agent,
+		profile:       nil,
+		labelProfiles: nil,
+		profWriter:    nil,
+		profBuffer:    nil,
+		startNano:     0,
 	}
 
 	return cp
@@ -35,6 +39,7 @@ func newCPUProfiler(agent *Agent) *CPUProfiler {
 
 func (cp *CPUProfiler) reset() {
 	cp.profile = newBreakdownNode("root")
+	cp.labelProfiles = make(map[string]*BreakdownNode)
 }
 
 func (cp *CPUProfiler) startProfiler() error {
@@ -62,13 +67,52 @@ func (cp *CPUProfiler) stopProfiler() error {
 	return nil
 }
 
-func (cp *CPUProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
+type ProfileDataSorter []*ProfileData
+
+func (pds ProfileDataSorter) Len() int {
+	return len(pds)
+}
+func (pds ProfileDataSorter) Swap(i, j int) {
+	pds[i].profile.measurement, pds[j].profile.measurement = pds[j].profile.measurement, pds[i].profile.measurement
+}
+func (pds ProfileDataSorter) Less(i, j int) bool {
+	return pds[i].profile.measurement < pds[j].profile.measurement
+}
+
+func (cp *CPUProfiler) buildProfile(duration int64, workloads map[string]int64) ([]*ProfileData, error) {
 	cp.profile.convertToPercentage(float64(duration * int64(runtime.NumCPU())))
 	cp.profile.propagate()
 	// filter calls with lower than 1% CPU stake
 	cp.profile.filter(2, 1, 100)
 
-	data := []*ProfileData{
+	data := make([]*ProfileData, 0)
+
+	for label, labelProfile := range cp.labelProfiles {
+		numSpans, ok := workloads[label]
+		if !ok {
+			continue
+		}
+
+		labelProfile.normalize(float64(numSpans * 1e6))
+		labelProfile.propagate()
+		labelProfile.filter(2, 1, math.Inf(0))
+
+		data = append(data, &ProfileData{
+			category:     CategoryCPUTrace,
+			name:         fmt.Sprintf("%v: %v", NameCPUTime, label),
+			unit:         UnitMillisecond,
+			unitInterval: 0,
+			profile:      labelProfile,
+		})
+	}
+
+	sort.Sort(sort.Reverse(ProfileDataSorter(data)))
+	if len(data) > 5 {
+		data = data[:5]
+	}
+
+	// prepend full profile
+	data = append([]*ProfileData{
 		&ProfileData{
 			category:     CategoryCPUProfile,
 			name:         NameCPUUsage,
@@ -76,7 +120,7 @@ func (cp *CPUProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
 			unitInterval: 0,
 			profile:      cp.profile,
 		},
-	}
+	}, data...)
 
 	return data, nil
 }
@@ -110,7 +154,7 @@ func (cp *CPUProfiler) updateCPUProfile(p *profile.Profile) error {
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
 
-			if funcName == "runtime.goexit" {
+			if (!cp.agent.ProfileAgent && isAgentFrame(fileName)) || funcName == "runtime.goexit" {
 				continue
 			}
 
@@ -119,6 +163,42 @@ func (cp *CPUProfiler) updateCPUProfile(p *profile.Profile) error {
 		}
 
 		currentNode.increment(stackDuration, stackSamples)
+
+		labelProfile := cp.findLabelProfile(s)
+		if labelProfile != nil {
+			currentNode := labelProfile
+			for i := len(s.Location) - 1; i >= 0; i-- {
+				l := s.Location[i]
+				funcName, fileName, fileLine := readFuncInfo(l)
+
+				if (!cp.agent.ProfileAgent && isAgentFrame(fileName)) || funcName == "runtime.goexit" {
+					continue
+				}
+
+				frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
+				currentNode = currentNode.findOrAddChild(frameName)
+			}
+
+			currentNode.increment(stackDuration, stackSamples)
+		}
+	}
+
+	return nil
+}
+
+func (cp *CPUProfiler) findLabelProfile(sample *profile.Sample) *BreakdownNode {
+	if sample.Label != nil {
+		if labels, ok := sample.Label["workload"]; ok {
+			if len(labels) > 0 {
+				if lp, ok := cp.labelProfiles[labels[0]]; ok {
+					return lp
+				} else {
+					lp = newBreakdownNode("root")
+					cp.labelProfiles[labels[0]] = lp
+					return lp
+				}
+			}
+		}
 	}
 
 	return nil
@@ -171,48 +251,13 @@ func (cp *CPUProfiler) stopCPUProfiler() (*profile.Profile, error) {
 	}
 }
 
-func symbolizeProfile(p *profile.Profile) error {
-	functions := make(map[string]*profile.Function)
-
-	for _, l := range p.Location {
-		if l.Address != 0 && len(l.Line) == 0 {
-			if f := runtime.FuncForPC(uintptr(l.Address)); f != nil {
-				name := f.Name()
-				fileName, lineNumber := f.FileLine(uintptr(l.Address))
-
-				pf := functions[name]
-				if pf == nil {
-					pf = &profile.Function{
-						ID:         uint64(len(p.Function) + 1),
-						Name:       name,
-						SystemName: name,
-						Filename:   fileName,
-					}
-
-					functions[name] = pf
-					p.Function = append(p.Function, pf)
-				}
-
-				line := profile.Line{
-					Function: pf,
-					Line:     int64(lineNumber),
-				}
-
-				l.Line = []profile.Line{line}
-				if l.Mapping != nil {
-					l.Mapping.HasFunctions = true
-					l.Mapping.HasFilenames = true
-					l.Mapping.HasLineNumbers = true
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 func isAgentStack(sample *profile.Sample) bool {
 	return stackContains(sample, "", agentPathInternal)
+}
+
+func isAgentFrame(fileNameTest string) bool {
+	return strings.Contains(fileNameTest, agentPath) &&
+		!strings.Contains(fileNameTest, agentPathExamples)
 }
 
 func stackContains(sample *profile.Sample, funcNameTest string, fileNameTest string) bool {

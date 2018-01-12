@@ -1,21 +1,12 @@
-// Copyright 2014 Google Inc. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2014 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 package profile
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 )
 
@@ -46,7 +37,7 @@ func (p *Profile) preEncode() {
 			vs := s.Label[k]
 			for _, v := range vs {
 				s.labelX = append(s.labelX,
-					label{
+					Label{
 						keyX: addString(strings, k),
 						strX: addString(strings, v),
 					},
@@ -62,16 +53,16 @@ func (p *Profile) preEncode() {
 			vs := s.NumLabel[k]
 			for _, v := range vs {
 				s.labelX = append(s.labelX,
-					label{
+					Label{
 						keyX: addString(strings, k),
 						numX: v,
 					},
 				)
 			}
 		}
-		s.locationIDX = make([]uint64, len(s.Location))
-		for i, loc := range s.Location {
-			s.locationIDX[i] = loc.ID
+		s.locationIDX = nil
+		for _, l := range s.Location {
+			s.locationIDX = append(s.locationIDX, l.ID)
 		}
 	}
 
@@ -108,13 +99,6 @@ func (p *Profile) preEncode() {
 		pt.unitX = addString(strings, pt.Unit)
 	}
 
-	p.commentX = nil
-	for _, c := range p.Comments {
-		p.commentX = append(p.commentX, addString(strings, c))
-	}
-
-	p.defaultSampleTypeX = addString(strings, p.DefaultSampleType)
-
 	p.stringTable = make([]string, len(strings))
 	for s, i := range strings {
 		p.stringTable[i] = s
@@ -146,8 +130,6 @@ func (p *Profile) encode(b *buffer) {
 		encodeMessage(b, 11, p.PeriodType)
 	}
 	encodeInt64Opt(b, 12, p.Period)
-	encodeInt64s(b, 13, p.commentX)
-	encodeInt64(b, 14, p.defaultSampleTypeX)
 }
 
 var profileDecoder = []decoder{
@@ -176,13 +158,9 @@ var profileDecoder = []decoder{
 	// repeated Location location = 4
 	func(b *buffer, m message) error {
 		x := new(Location)
-		x.Line = make([]Line, 0, 8) // Pre-allocate Line buffer
 		pp := m.(*Profile)
 		pp.Location = append(pp.Location, x)
-		err := decodeMessage(b, x)
-		var tmp []Line
-		x.Line = append(tmp, x.Line...) // Shrink to allocated size
-		return err
+		return decodeMessage(b, x)
 	},
 	// repeated Function function = 5
 	func(b *buffer, m message) error {
@@ -197,32 +175,28 @@ var profileDecoder = []decoder{
 		if err != nil {
 			return err
 		}
-		if m.(*Profile).stringTable[0] != "" {
+		if *&m.(*Profile).stringTable[0] != "" {
 			return errors.New("string_table[0] must be ''")
 		}
 		return nil
 	},
-	// int64 drop_frames = 7
+	// repeated int64 drop_frames = 7
 	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).dropFramesX) },
-	// int64 keep_frames = 8
+	// repeated int64 keep_frames = 8
 	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).keepFramesX) },
-	// int64 time_nanos = 9
+	// repeated int64 time_nanos = 9
 	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).TimeNanos) },
-	// int64 duration_nanos = 10
+	// repeated int64 duration_nanos = 10
 	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).DurationNanos) },
-	// ValueType period_type = 11
+	// optional string period_type = 11
 	func(b *buffer, m message) error {
 		x := new(ValueType)
 		pp := m.(*Profile)
 		pp.PeriodType = x
 		return decodeMessage(b, x)
 	},
-	// int64 period = 12
+	// repeated int64 period = 12
 	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).Period) },
-	// repeated int64 comment = 13
-	func(b *buffer, m message) error { return decodeInt64s(b, &m.(*Profile).commentX) },
-	// int64 defaultSampleType = 14
-	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Profile).defaultSampleTypeX) },
 }
 
 // postDecode takes the unexported fields populated by decode (with
@@ -230,55 +204,36 @@ var profileDecoder = []decoder{
 // The unexported fields are cleared up to facilitate testing.
 func (p *Profile) postDecode() error {
 	var err error
-	mappings := make(map[uint64]*Mapping, len(p.Mapping))
-	mappingIds := make([]*Mapping, len(p.Mapping)+1)
+
+	mappings := make(map[uint64]*Mapping)
 	for _, m := range p.Mapping {
 		m.File, err = getString(p.stringTable, &m.fileX, err)
 		m.BuildID, err = getString(p.stringTable, &m.buildIDX, err)
-		if m.ID < uint64(len(mappingIds)) {
-			mappingIds[m.ID] = m
-		} else {
-			mappings[m.ID] = m
-		}
+		mappings[m.ID] = m
 	}
 
-	functions := make(map[uint64]*Function, len(p.Function))
-	functionIds := make([]*Function, len(p.Function)+1)
+	functions := make(map[uint64]*Function)
 	for _, f := range p.Function {
 		f.Name, err = getString(p.stringTable, &f.nameX, err)
 		f.SystemName, err = getString(p.stringTable, &f.systemNameX, err)
 		f.Filename, err = getString(p.stringTable, &f.filenameX, err)
-		if f.ID < uint64(len(functionIds)) {
-			functionIds[f.ID] = f
-		} else {
-			functions[f.ID] = f
-		}
+		functions[f.ID] = f
 	}
 
-	locations := make(map[uint64]*Location, len(p.Location))
-	locationIds := make([]*Location, len(p.Location)+1)
+	locations := make(map[uint64]*Location)
 	for _, l := range p.Location {
-		if id := l.mappingIDX; id < uint64(len(mappingIds)) {
-			l.Mapping = mappingIds[id]
-		} else {
-			l.Mapping = mappings[id]
-		}
+		l.Mapping = mappings[l.mappingIDX]
 		l.mappingIDX = 0
 		for i, ln := range l.Line {
 			if id := ln.functionIDX; id != 0 {
-				l.Line[i].functionIDX = 0
-				if id < uint64(len(functionIds)) {
-					l.Line[i].Function = functionIds[id]
-				} else {
-					l.Line[i].Function = functions[id]
+				l.Line[i].Function = functions[id]
+				if l.Line[i].Function == nil {
+					return fmt.Errorf("Function ID %d not found", id)
 				}
+				l.Line[i].functionIDX = 0
 			}
 		}
-		if l.ID < uint64(len(locationIds)) {
-			locationIds[l.ID] = l
-		} else {
-			locations[l.ID] = l
-		}
+		locations[l.ID] = l
 	}
 
 	for _, st := range p.SampleType {
@@ -287,15 +242,15 @@ func (p *Profile) postDecode() error {
 	}
 
 	for _, s := range p.Sample {
-		labels := make(map[string][]string, len(s.labelX))
-		numLabels := make(map[string][]int64, len(s.labelX))
+		labels := make(map[string][]string)
+		numLabels := make(map[string][]int64)
 		for _, l := range s.labelX {
 			var key, value string
 			key, err = getString(p.stringTable, &l.keyX, err)
 			if l.strX != 0 {
 				value, err = getString(p.stringTable, &l.strX, err)
 				labels[key] = append(labels[key], value)
-			} else if l.numX != 0 {
+			} else {
 				numLabels[key] = append(numLabels[key], l.numX)
 			}
 		}
@@ -305,13 +260,9 @@ func (p *Profile) postDecode() error {
 		if len(numLabels) > 0 {
 			s.NumLabel = numLabels
 		}
-		s.Location = make([]*Location, len(s.locationIDX))
-		for i, lid := range s.locationIDX {
-			if lid < uint64(len(locationIds)) {
-				s.Location[i] = locationIds[lid]
-			} else {
-				s.Location[i] = locations[lid]
-			}
+		s.Location = nil
+		for _, lid := range s.locationIDX {
+			s.Location = append(s.Location, locations[lid])
 		}
 		s.locationIDX = nil
 	}
@@ -327,17 +278,8 @@ func (p *Profile) postDecode() error {
 		pt.Type, err = getString(p.stringTable, &pt.typeX, err)
 		pt.Unit, err = getString(p.stringTable, &pt.unitX, err)
 	}
-
-	for _, i := range p.commentX {
-		var c string
-		c, err = getString(p.stringTable, &i, err)
-		p.Comments = append(p.Comments, c)
-	}
-
-	p.commentX = nil
-	p.DefaultSampleType, err = getString(p.stringTable, &p.defaultSampleTypeX, err)
 	p.stringTable = nil
-	return err
+	return nil
 }
 
 func (p *ValueType) decoder() []decoder {
@@ -363,7 +305,9 @@ func (p *Sample) decoder() []decoder {
 
 func (p *Sample) encode(b *buffer) {
 	encodeUint64s(b, 1, p.locationIDX)
-	encodeInt64s(b, 2, p.Value)
+	for _, x := range p.Value {
+		encodeInt64(b, 2, x)
+	}
 	for _, x := range p.labelX {
 		encodeMessage(b, 3, x)
 	}
@@ -379,16 +323,16 @@ var sampleDecoder = []decoder{
 	func(b *buffer, m message) error {
 		s := m.(*Sample)
 		n := len(s.labelX)
-		s.labelX = append(s.labelX, label{})
+		s.labelX = append(s.labelX, Label{})
 		return decodeMessage(b, &s.labelX[n])
 	},
 }
 
-func (p label) decoder() []decoder {
+func (p Label) decoder() []decoder {
 	return labelDecoder
 }
 
-func (p label) encode(b *buffer) {
+func (p Label) encode(b *buffer) {
 	encodeInt64Opt(b, 1, p.keyX)
 	encodeInt64Opt(b, 2, p.strX)
 	encodeInt64Opt(b, 3, p.numX)
@@ -397,11 +341,11 @@ func (p label) encode(b *buffer) {
 var labelDecoder = []decoder{
 	nil, // 0
 	// optional int64 key = 1
-	func(b *buffer, m message) error { return decodeInt64(b, &m.(*label).keyX) },
+	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Label).keyX) },
 	// optional int64 str = 2
-	func(b *buffer, m message) error { return decodeInt64(b, &m.(*label).strX) },
+	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Label).strX) },
 	// optional int64 num = 3
-	func(b *buffer, m message) error { return decodeInt64(b, &m.(*label).numX) },
+	func(b *buffer, m message) error { return decodeInt64(b, &m.(*Label).numX) },
 }
 
 func (p *Mapping) decoder() []decoder {

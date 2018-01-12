@@ -166,10 +166,18 @@ func (a *Agent) Profile() *Span {
 // by wrapping http.HandleFunc method parameters.
 func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
 	return pattern, func(w http.ResponseWriter, r *http.Request) {
-		span := a.Profile()
+		span := newSpan(a)
+		span.workload = pattern
+		span.start()
 		defer span.Stop()
 
-		handlerFunc(w, r)
+		if span.active {
+			WithPprofLabel("workload", pattern, r.Context(), func() {
+				handlerFunc(w, r)
+			})
+		} else {
+			handlerFunc(w, r)
+		}
 	}
 }
 
@@ -177,10 +185,18 @@ func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.Respons
 // by wrapping http.Handle method parameters.
 func (a *Agent) ProfileHandler(pattern string, handler http.Handler) (string, http.Handler) {
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		span := a.Profile()
+		span := newSpan(a)
+		span.workload = pattern
+		span.start()
 		defer span.Stop()
 
-		handler.ServeHTTP(w, r)
+		if span.active {
+			WithPprofLabel("workload", pattern, r.Context(), func() {
+				handler.ServeHTTP(w, r)
+			})
+		} else {
+			handler.ServeHTTP(w, r)
+		}
 	})
 }
 

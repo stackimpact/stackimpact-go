@@ -5,9 +5,10 @@ import (
 )
 
 type Span struct {
-	agent   *Agent
-	started bool
-	active  bool
+	agent    *Agent
+	started  bool
+	active   bool
+	workload string
 }
 
 func newSpan(agent *Agent) *Span {
@@ -23,7 +24,7 @@ func newSpan(agent *Agent) *Span {
 func (s *Span) start() {
 	s.started = atomic.CompareAndSwapInt32(&s.agent.spanStarted, 0, 1)
 	if s.started {
-		s.active = s.agent.internalAgent.StartProfiling()
+		s.active = s.agent.internalAgent.StartProfiling(s.workload)
 	}
 }
 

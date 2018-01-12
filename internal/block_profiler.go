@@ -67,7 +67,7 @@ func (bp *BlockProfiler) stopProfiler() error {
 	return nil
 }
 
-func (bp *BlockProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
+func (bp *BlockProfiler) buildProfile(duration int64, workloads map[string]int64) ([]*ProfileData, error) {
 	bp.blockProfile.normalize(float64(duration) / 1e9)
 	bp.blockProfile.propagate()
 	bp.blockProfile.filter(2, 1, math.Inf(0))
@@ -135,7 +135,7 @@ func (bp *BlockProfiler) updateBlockProfile(p *profile.Profile) error {
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
 
-			if funcName == "runtime.goexit" {
+			if (!bp.agent.ProfileAgent && isAgentFrame(fileName)) || funcName == "runtime.goexit" {
 				continue
 			}
 
@@ -149,7 +149,7 @@ func (bp *BlockProfiler) updateBlockProfile(p *profile.Profile) error {
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
 
-			if funcName == "runtime.goexit" {
+			if (!bp.agent.ProfileAgent && isAgentFrame(fileName)) || funcName == "runtime.goexit" {
 				continue
 			}
 

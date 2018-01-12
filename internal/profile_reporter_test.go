@@ -27,7 +27,7 @@ func (tp *TestProfiler) stopProfiler() error {
 	return nil
 }
 
-func (tp *TestProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
+func (tp *TestProfiler) buildProfile(duration int64, workloads map[string]int64) ([]*ProfileData, error) {
 	tp.closed = true
 
 	data := []*ProfileData{
@@ -61,7 +61,7 @@ func TestMaxDuration(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true)
+	rep.startProfiling(true, "")
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
@@ -74,7 +74,7 @@ func TestMaxDuration(t *testing.T) {
 
 	rep.profileDuration = 21 * 1e9
 
-	rep.startProfiling(true)
+	rep.startProfiling(true, "")
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -100,14 +100,14 @@ func TestMaxSpanCount(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true)
+	rep.startProfiling(true, "")
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
 		t.Errorf("Start count is not 1")
 	}
 
-	rep.startProfiling(true)
+	rep.startProfiling(true, "")
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -133,7 +133,7 @@ func TestReportProfile(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true)
+	rep.startProfiling(true, "")
 	time.Sleep(10 * time.Millisecond)
 	rep.stopProfiling()
 

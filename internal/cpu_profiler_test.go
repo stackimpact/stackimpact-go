@@ -33,7 +33,7 @@ func TestCreateCPUProfile(t *testing.T) {
 	cpuProfiler.startProfiler()
 	time.Sleep(500 * time.Millisecond)
 	cpuProfiler.stopProfiler()
-	data, _ := cpuProfiler.buildProfile(500 * 1e6)
+	data, _ := cpuProfiler.buildProfile(500*1e6, nil)
 	profile := data[0].profile
 
 	if false {

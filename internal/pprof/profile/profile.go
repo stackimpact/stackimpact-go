@@ -1,19 +1,12 @@
-// Copyright 2014 Google Inc. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2014 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 // Package profile provides a representation of profile.proto and
 // methods to encode/decode profiles in this format.
+//
+// This package is only for testing runtime/pprof.
+// It is not used by production Go programs.
 package profile
 
 import (
@@ -22,22 +15,18 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
 
 // Profile is an in-memory representation of profile.proto.
 type Profile struct {
-	SampleType        []*ValueType
-	DefaultSampleType string
-	Sample            []*Sample
-	Mapping           []*Mapping
-	Location          []*Location
-	Function          []*Function
-	Comments          []string
+	SampleType []*ValueType
+	Sample     []*Sample
+	Mapping    []*Mapping
+	Location   []*Location
+	Function   []*Function
 
 	DropFrames string
 	KeepFrames string
@@ -47,11 +36,9 @@ type Profile struct {
 	PeriodType    *ValueType
 	Period        int64
 
-	commentX           []int64
-	dropFramesX        int64
-	keepFramesX        int64
-	stringTable        []string
-	defaultSampleTypeX int64
+	dropFramesX int64
+	keepFramesX int64
+	stringTable []string
 }
 
 // ValueType corresponds to Profile.ValueType
@@ -71,11 +58,11 @@ type Sample struct {
 	NumLabel map[string][]int64
 
 	locationIDX []uint64
-	labelX      []label
+	labelX      []Label
 }
 
-// label corresponds to Profile.Label
-type label struct {
+// Label corresponds to Profile.Label
+type Label struct {
 	keyX int64
 	// Exactly one of the two following values must be set
 	strX int64
@@ -134,33 +121,27 @@ type Function struct {
 // may be a gzip-compressed encoded protobuf or one of many legacy
 // profile formats which may be unsupported in the future.
 func Parse(r io.Reader) (*Profile, error) {
-	data, err := ioutil.ReadAll(r)
+	orig, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	return ParseData(data)
-}
 
-// ParseData parses a profile from a buffer and checks for its
-// validity.
-func ParseData(data []byte) (*Profile, error) {
 	var p *Profile
-	var err error
-	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
-		gz, err := gzip.NewReader(bytes.NewBuffer(data))
-		if err == nil {
-			data, err = ioutil.ReadAll(gz)
-		}
+	if len(orig) >= 2 && orig[0] == 0x1f && orig[1] == 0x8b {
+		gz, err := gzip.NewReader(bytes.NewBuffer(orig))
 		if err != nil {
 			return nil, fmt.Errorf("decompressing profile: %v", err)
 		}
+		data, err := ioutil.ReadAll(gz)
+		if err != nil {
+			return nil, fmt.Errorf("decompressing profile: %v", err)
+		}
+		orig = data
 	}
-	if p, err = ParseUncompressed(data); err != nil && err != errNoData {
-		p, err = parseLegacy(data)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("parsing profile: %v", err)
+	if p, err = parseUncompressed(orig); err != nil {
+		if p, err = parseLegacy(orig); err != nil {
+			return nil, fmt.Errorf("parsing profile: %v", err)
+		}
 	}
 
 	if err := p.CheckValid(); err != nil {
@@ -171,7 +152,6 @@ func ParseData(data []byte) (*Profile, error) {
 
 var errUnrecognized = fmt.Errorf("unrecognized profile format")
 var errMalformed = fmt.Errorf("malformed profile format")
-var errNoData = fmt.Errorf("empty input file")
 
 func parseLegacy(data []byte) (*Profile, error) {
 	parsers := []func([]byte) (*Profile, error){
@@ -180,12 +160,12 @@ func parseLegacy(data []byte) (*Profile, error) {
 		parseGoCount, // goroutine, threadcreate
 		parseThread,
 		parseContention,
-		parseJavaProfile,
 	}
 
 	for _, parser := range parsers {
 		p, err := parser(data)
 		if err == nil {
+			p.setMain()
 			p.addLegacyFrameInfo()
 			return p, nil
 		}
@@ -196,11 +176,7 @@ func parseLegacy(data []byte) (*Profile, error) {
 	return nil, errUnrecognized
 }
 
-// ParseUncompressed parses an uncompressed protobuf into a profile.
-func ParseUncompressed(data []byte) (*Profile, error) {
-	if len(data) == 0 {
-		return nil, errNoData
-	}
+func parseUncompressed(data []byte) (*Profile, error) {
 	p := &Profile{}
 	if err := unmarshal(data, p); err != nil {
 		return nil, err
@@ -215,84 +191,26 @@ func ParseUncompressed(data []byte) (*Profile, error) {
 
 var libRx = regexp.MustCompile(`([.]so$|[.]so[._][0-9]+)`)
 
-// massageMappings applies heuristic-based changes to the profile
-// mappings to account for quirks of some environments.
-func (p *Profile) massageMappings() {
-	// Merge adjacent regions with matching names, checking that the offsets match
-	if len(p.Mapping) > 1 {
-		mappings := []*Mapping{p.Mapping[0]}
-		for _, m := range p.Mapping[1:] {
-			lm := mappings[len(mappings)-1]
-			if adjacent(lm, m) {
-				lm.Limit = m.Limit
-				if m.File != "" {
-					lm.File = m.File
-				}
-				if m.BuildID != "" {
-					lm.BuildID = m.BuildID
-				}
-				p.updateLocationMapping(m, lm)
-				continue
-			}
-			mappings = append(mappings, m)
-		}
-		p.Mapping = mappings
-	}
-
-	// Use heuristics to identify main binary and move it to the top of the list of mappings
-	for i, m := range p.Mapping {
-		file := strings.TrimSpace(strings.Replace(m.File, "(deleted)", "", -1))
+// setMain scans Mapping entries and guesses which entry is main
+// because legacy profiles don't obey the convention of putting main
+// first.
+func (p *Profile) setMain() {
+	for i := 0; i < len(p.Mapping); i++ {
+		file := strings.TrimSpace(strings.Replace(p.Mapping[i].File, "(deleted)", "", -1))
 		if len(file) == 0 {
 			continue
 		}
 		if len(libRx.FindStringSubmatch(file)) > 0 {
 			continue
 		}
-		if file[0] == '[' {
+		if strings.HasPrefix(file, "[") {
 			continue
 		}
 		// Swap what we guess is main to position 0.
-		p.Mapping[0], p.Mapping[i] = p.Mapping[i], p.Mapping[0]
+		tmp := p.Mapping[i]
+		p.Mapping[i] = p.Mapping[0]
+		p.Mapping[0] = tmp
 		break
-	}
-
-	// Keep the mapping IDs neatly sorted
-	for i, m := range p.Mapping {
-		m.ID = uint64(i + 1)
-	}
-}
-
-// adjacent returns whether two mapping entries represent the same
-// mapping that has been split into two. Check that their addresses are adjacent,
-// and if the offsets match, if they are available.
-func adjacent(m1, m2 *Mapping) bool {
-	if m1.File != "" && m2.File != "" {
-		if m1.File != m2.File {
-			return false
-		}
-	}
-	if m1.BuildID != "" && m2.BuildID != "" {
-		if m1.BuildID != m2.BuildID {
-			return false
-		}
-	}
-	if m1.Limit != m2.Start {
-		return false
-	}
-	if m1.Offset != 0 && m2.Offset != 0 {
-		offset := m1.Offset + (m1.Limit - m1.Start)
-		if offset != m2.Offset {
-			return false
-		}
-	}
-	return true
-}
-
-func (p *Profile) updateLocationMapping(from, to *Mapping) {
-	for _, l := range p.Location {
-		if l.Mapping == from {
-			l.Mapping = to
-		}
 	}
 }
 
@@ -303,14 +221,6 @@ func (p *Profile) Write(w io.Writer) error {
 	zw := gzip.NewWriter(w)
 	defer zw.Close()
 	_, err := zw.Write(b)
-	return err
-}
-
-// WriteUncompressed writes the profile as a marshaled protobuf.
-func (p *Profile) WriteUncompressed(w io.Writer) error {
-	p.preEncode()
-	b := marshal(p)
-	_, err := w.Write(b)
 	return err
 }
 
@@ -327,11 +237,6 @@ func (p *Profile) CheckValid() error {
 	for _, s := range p.Sample {
 		if len(s.Value) != sampleLen {
 			return fmt.Errorf("mismatch: sample has: %d values vs. %d types", len(s.Value), len(p.SampleType))
-		}
-		for _, l := range s.Location {
-			if l == nil {
-				return fmt.Errorf("sample has nil location")
-			}
 		}
 	}
 
@@ -426,13 +331,11 @@ func (p *Profile) Aggregate(inlineFrame, function, filename, linenumber, address
 	return p.CheckValid()
 }
 
-// String dumps a text representation of a profile. Intended mainly
+// Print dumps a text representation of a profile. Intended mainly
 // for debugging purposes.
 func (p *Profile) String() string {
-	ss := make([]string, 0, len(p.Comments)+len(p.Sample)+len(p.Mapping)+len(p.Location))
-	for _, c := range p.Comments {
-		ss = append(ss, "Comment: "+c)
-	}
+
+	ss := make([]string, 0, len(p.Sample)+len(p.Mapping)+len(p.Location))
 	if pt := p.PeriodType; pt != nil {
 		ss = append(ss, fmt.Sprintf("PeriodType: %s %s", pt.Type, pt.Unit))
 	}
@@ -441,17 +344,13 @@ func (p *Profile) String() string {
 		ss = append(ss, fmt.Sprintf("Time: %v", time.Unix(0, p.TimeNanos)))
 	}
 	if p.DurationNanos != 0 {
-		ss = append(ss, fmt.Sprintf("Duration: %.4v", time.Duration(p.DurationNanos)))
+		ss = append(ss, fmt.Sprintf("Duration: %v", time.Duration(p.DurationNanos)))
 	}
 
 	ss = append(ss, "Samples:")
 	var sh1 string
 	for _, s := range p.SampleType {
-		dflt := ""
-		if s.Type == p.DefaultSampleType {
-			dflt = "[dflt]"
-		}
-		sh1 = sh1 + fmt.Sprintf("%s/%s%s ", s.Type, s.Unit, dflt)
+		sh1 = sh1 + fmt.Sprintf("%s/%s ", s.Type, s.Unit)
 	}
 	ss = append(ss, strings.TrimSpace(sh1))
 	for _, s := range p.Sample {
@@ -466,20 +365,18 @@ func (p *Profile) String() string {
 		ss = append(ss, sv)
 		const labelHeader = "                "
 		if len(s.Label) > 0 {
-			ls := []string{}
+			ls := labelHeader
 			for k, v := range s.Label {
-				ls = append(ls, fmt.Sprintf("%s:%v", k, v))
+				ls = ls + fmt.Sprintf("%s:%v ", k, v)
 			}
-			sort.Strings(ls)
-			ss = append(ss, labelHeader+strings.Join(ls, " "))
+			ss = append(ss, ls)
 		}
 		if len(s.NumLabel) > 0 {
-			ls := []string{}
+			ls := labelHeader
 			for k, v := range s.NumLabel {
-				ls = append(ls, fmt.Sprintf("%s:%v", k, v))
+				ls = ls + fmt.Sprintf("%s:%v ", k, v)
 			}
-			sort.Strings(ls)
-			ss = append(ss, labelHeader+strings.Join(ls, " "))
+			ss = append(ss, ls)
 		}
 	}
 
@@ -536,40 +433,66 @@ func (p *Profile) String() string {
 	return strings.Join(ss, "\n") + "\n"
 }
 
-// Scale multiplies all sample values in a profile by a constant.
-func (p *Profile) Scale(ratio float64) {
-	if ratio == 1 {
-		return
+// Merge adds profile p adjusted by ratio r into profile p. Profiles
+// must be compatible (same Type and SampleType).
+// TODO(rsilvera): consider normalizing the profiles based on the
+// total samples collected.
+func (p *Profile) Merge(pb *Profile, r float64) error {
+	if err := p.Compatible(pb); err != nil {
+		return err
 	}
-	ratios := make([]float64, len(p.SampleType))
-	for i := range p.SampleType {
-		ratios[i] = ratio
-	}
-	p.ScaleN(ratios)
-}
 
-// ScaleN multiplies each sample values in a sample by a different amount.
-func (p *Profile) ScaleN(ratios []float64) error {
-	if len(p.SampleType) != len(ratios) {
-		return fmt.Errorf("mismatched scale ratios, got %d, want %d", len(ratios), len(p.SampleType))
+	pb = pb.Copy()
+
+	// Keep the largest of the two periods.
+	if pb.Period > p.Period {
+		p.Period = pb.Period
 	}
-	allOnes := true
-	for _, r := range ratios {
-		if r != 1 {
-			allOnes = false
-			break
-		}
+
+	p.DurationNanos += pb.DurationNanos
+
+	p.Mapping = append(p.Mapping, pb.Mapping...)
+	for i, m := range p.Mapping {
+		m.ID = uint64(i + 1)
 	}
-	if allOnes {
-		return nil
+	p.Location = append(p.Location, pb.Location...)
+	for i, l := range p.Location {
+		l.ID = uint64(i + 1)
 	}
-	for _, s := range p.Sample {
-		for i, v := range s.Value {
-			if ratios[i] != 1 {
-				s.Value[i] = int64(float64(v) * ratios[i])
+	p.Function = append(p.Function, pb.Function...)
+	for i, f := range p.Function {
+		f.ID = uint64(i + 1)
+	}
+
+	if r != 1.0 {
+		for _, s := range pb.Sample {
+			for i, v := range s.Value {
+				s.Value[i] = int64((float64(v) * r))
 			}
 		}
 	}
+	p.Sample = append(p.Sample, pb.Sample...)
+	return p.CheckValid()
+}
+
+// Compatible determines if two profiles can be compared/merged.
+// returns nil if the profiles are compatible; otherwise an error with
+// details on the incompatibility.
+func (p *Profile) Compatible(pb *Profile) error {
+	if !compatibleValueTypes(p.PeriodType, pb.PeriodType) {
+		return fmt.Errorf("incompatible period types %v and %v", p.PeriodType, pb.PeriodType)
+	}
+
+	if len(p.SampleType) != len(pb.SampleType) {
+		return fmt.Errorf("incompatible sample types %v and %v", p.SampleType, pb.SampleType)
+	}
+
+	for i := range p.SampleType {
+		if !compatibleValueTypes(p.SampleType[i], pb.SampleType[i]) {
+			return fmt.Errorf("incompatible sample types %v and %v", p.SampleType, pb.SampleType)
+		}
+	}
+
 	return nil
 }
 
@@ -577,7 +500,7 @@ func (p *Profile) ScaleN(ratios []float64) error {
 // symbolized function information.
 func (p *Profile) HasFunctions() bool {
 	for _, l := range p.Location {
-		if l.Mapping != nil && !l.Mapping.HasFunctions {
+		if l.Mapping == nil || !l.Mapping.HasFunctions {
 			return false
 		}
 	}
@@ -588,18 +511,18 @@ func (p *Profile) HasFunctions() bool {
 // symbolized file and line number information.
 func (p *Profile) HasFileLines() bool {
 	for _, l := range p.Location {
-		if l.Mapping != nil && (!l.Mapping.HasFilenames || !l.Mapping.HasLineNumbers) {
+		if l.Mapping == nil || (!l.Mapping.HasFilenames || !l.Mapping.HasLineNumbers) {
 			return false
 		}
 	}
 	return true
 }
 
-// Unsymbolizable returns true if a mapping points to a binary for which
-// locations can't be symbolized in principle, at least now.
-func (m *Mapping) Unsymbolizable() bool {
-	name := filepath.Base(m.File)
-	return name == "[vdso]" || strings.HasPrefix(name, "linux-vdso") || name == "[heap]" || strings.HasPrefix(m.File, "/dev/dri/")
+func compatibleValueTypes(v1, v2 *ValueType) bool {
+	if v1 == nil || v2 == nil {
+		return true // No grounds to disqualify.
+	}
+	return v1.Type == v2.Type && v1.Unit == v2.Unit
 }
 
 // Copy makes a fully independent copy of a profile.
@@ -616,4 +539,37 @@ func (p *Profile) Copy() *Profile {
 	}
 
 	return pp
+}
+
+// Demangler maps symbol names to a human-readable form. This may
+// include C++ demangling and additional simplification. Names that
+// are not demangled may be missing from the resulting map.
+type Demangler func(name []string) (map[string]string, error)
+
+// Demangle attempts to demangle and optionally simplify any function
+// names referenced in the profile. It works on a best-effort basis:
+// it will silently preserve the original names in case of any errors.
+func (p *Profile) Demangle(d Demangler) error {
+	// Collect names to demangle.
+	var names []string
+	for _, fn := range p.Function {
+		names = append(names, fn.SystemName)
+	}
+
+	// Update profile with demangled names.
+	demangled, err := d(names)
+	if err != nil {
+		return err
+	}
+	for _, fn := range p.Function {
+		if dd, ok := demangled[fn.SystemName]; ok {
+			fn.Name = dd
+		}
+	}
+	return nil
+}
+
+// Empty returns true if the profile contains no samples.
+func (p *Profile) Empty() bool {
+	return len(p.Sample) == 0
 }

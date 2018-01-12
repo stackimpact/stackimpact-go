@@ -55,7 +55,7 @@ func (ap *AllocationProfiler) stopProfiler() error {
 	return nil
 }
 
-func (ap *AllocationProfiler) buildProfile(duration int64) ([]*ProfileData, error) {
+func (ap *AllocationProfiler) buildProfile(duration int64, workloads map[string]int64) ([]*ProfileData, error) {
 	p, err := ap.readHeapProfile()
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (ap *AllocationProfiler) createAllocationCallGraph(p *profile.Profile) (*Br
 			l := s.Location[i]
 			funcName, fileName, fileLine := readFuncInfo(l)
 
-			if funcName == "runtime.goexit" {
+			if (!ap.agent.ProfileAgent && isAgentFrame(fileName)) || funcName == "runtime.goexit" {
 				continue
 			}
 

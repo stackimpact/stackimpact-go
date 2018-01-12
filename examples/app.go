@@ -108,7 +108,7 @@ func simulateNetworkWait() {
 			done := make(chan bool)
 
 			go func() {
-				time.Sleep(time.Duration(200 + rand.Intn(5)) * time.Millisecond)
+				time.Sleep(time.Duration(200+rand.Intn(5)) * time.Millisecond)
 				done <- true
 			}()
 			<-done
@@ -178,10 +178,10 @@ func simulateLockWait() {
 	}
 }
 
-func simulateWorkloadProfiling() {
+func simulateProgrammaticProfiling() {
 	for {
 		span := agent.Profile()
-		fmt.Println("Workload profile started")
+		fmt.Println("Programmatic profile started")
 
 		// wait
 		time.Sleep(time.Duration(10+rand.Intn(10)) * time.Millisecond)
@@ -192,9 +192,39 @@ func simulateWorkloadProfiling() {
 		}
 
 		span.Stop()
-		fmt.Println("Workload profile stopped")
+		fmt.Println("Programmatic profile stopped")
 
 		time.Sleep(20 * time.Second)
+	}
+}
+
+func simulateWorkloadProfiling() {
+	// start HTTP server
+	go func() {
+		http.HandleFunc(agent.ProfileHandlerFunc("/some-handler-workload", func(w http.ResponseWriter, r *http.Request) {
+			for i := 0; i < 500000; i++ {
+				str := "str" + strconv.Itoa(i)
+				str = str + "a"
+			}
+
+			fmt.Fprintf(w, "OK")
+		}))
+
+		if err := http.ListenAndServe(":5003", nil); err != nil {
+			log.Fatal(err)
+			return
+		}
+	}()
+
+	requestTicker := time.NewTicker(1000 * time.Millisecond)
+	for {
+		select {
+		case <-requestTicker.C:
+			res, err := http.Get("http://localhost:5003/some-handler-workload")
+			if err == nil {
+				res.Body.Close()
+			}
+		}
 	}
 }
 
@@ -214,7 +244,6 @@ func simulateSegments() {
 		<-done1
 	}
 }
-
 
 func simulateHandlerSegments() {
 	// start HTTP server
@@ -298,7 +327,6 @@ func simulateErrors() {
 
 }
 
-
 func main() {
 	// StackImpact initialization
 	agent = stackimpact.Start(stackimpact.Options{
@@ -316,6 +344,7 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
+	go simulateProgrammaticProfiling()
 	go simulateWorkloadProfiling()
 	go simulateSegments()
 	go simulateHandlerSegments()

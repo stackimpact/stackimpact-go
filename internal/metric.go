@@ -23,6 +23,7 @@ const CategoryCPUProfile string = "cpu-profile"
 const CategoryMemoryProfile string = "memory-profile"
 const CategoryBlockProfile string = "block-profile"
 const CategoryLockProfile string = "lock-profile"
+const CategoryCPUTrace string = "cpu-trace"
 const CategoryBlockTrace string = "block-trace"
 const CategorySegmentTrace string = "segment-trace"
 const CategoryErrorProfile string = "error-profile"
@@ -67,13 +68,18 @@ type filterFuncType func(name string) bool
 
 type Reservoir []uint64
 
-func (r Reservoir) Len() int           { return len(r) }
-func (r Reservoir) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
-func (r Reservoir) Less(i, j int) bool { return r[i] < r[j] }
+func (r Reservoir) Len() int {
+	return len(r)
+}
+func (r Reservoir) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+func (r Reservoir) Less(i, j int) bool {
+	return r[i] < r[j]
+}
 
 type BreakdownNode struct {
 	name        string
-	labels      []string
 	measurement float64
 	numSamples  int64
 	counter     int64
@@ -85,7 +91,6 @@ type BreakdownNode struct {
 func newBreakdownNode(name string) *BreakdownNode {
 	bn := &BreakdownNode{
 		name:        name,
-		labels:      nil,
 		measurement: 0,
 		numSamples:  0,
 		counter:     0,
@@ -95,14 +100,6 @@ func newBreakdownNode(name string) *BreakdownNode {
 	}
 
 	return bn
-}
-
-func (bn *BreakdownNode) addLabel(label string) {
-	if bn.labels == nil {
-		bn.labels = []string{label}
-	} else {
-		bn.labels = append(bn.labels, label)
-	}
 }
 
 func (bn *BreakdownNode) findChild(name string) *BreakdownNode {
@@ -332,7 +329,6 @@ func (bn *BreakdownNode) toMap() map[string]interface{} {
 
 	nodeMap := map[string]interface{}{
 		"name":        bn.name,
-		"labels":      bn.labels,
 		"measurement": bn.measurement,
 		"num_samples": bn.numSamples,
 		"children":    childrenMap,

@@ -42,7 +42,7 @@ func TestStartStopProfiling(t *testing.T) {
 	agent.AutoProfiling = false
 
 	agent.cpuReporter.start()
-	agent.StartProfiling()
+	agent.StartProfiling("")
 
 	time.Sleep(50 * time.Millisecond)
 
