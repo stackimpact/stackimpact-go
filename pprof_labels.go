@@ -3,13 +3,14 @@
 package stackimpact
 
 import (
+	"net/http"
 	"context"
 	"runtime/pprof"
 )
 
-func WithPprofLabel(key string, val string, ctx context.Context, fn func()) {
+func WithPprofLabel(key string, val string, req *http.Request, fn func()) {
 	labelSet := pprof.Labels(key, val)
-	pprof.Do(ctx, labelSet, func(ctx context.Context) {
+	pprof.Do(req.Context(), labelSet, func(ctx context.Context) {
 		fn()
 	})
 }

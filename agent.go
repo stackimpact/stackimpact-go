@@ -172,7 +172,7 @@ func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.Respons
 		defer span.Stop()
 
 		if span.active {
-			WithPprofLabel("workload", pattern, r.Context(), func() {
+			WithPprofLabel("workload", pattern, r, func() {
 				handlerFunc(w, r)
 			})
 		} else {
@@ -191,7 +191,7 @@ func (a *Agent) ProfileHandler(pattern string, handler http.Handler) (string, ht
 		defer span.Stop()
 
 		if span.active {
-			WithPprofLabel("workload", pattern, r.Context(), func() {
+			WithPprofLabel("workload", pattern, r, func() {
 				handler.ServeHTTP(w, r)
 			})
 		} else {
