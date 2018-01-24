@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.4"
+const AgentVersion = "2.3.5"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
@@ -235,6 +235,10 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 }
 
 func (a *Agent) Report() {
+	if a.AutoProfiling {
+		return
+	}
+
 	defer a.recoverAndLog()
 
 	a.configLoader.load()
