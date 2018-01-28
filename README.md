@@ -34,7 +34,7 @@ Linux, OS X or Windows. Go version 1.5+.
 
 #### Create StackImpact account
 
-[Sign up](https://dashboard.stackimpact.com/#/signup) for a free account (also with GitHub login).
+[Sign up](https://dashboard.stackimpact.com/#/signup) for a free trial account (also with GitHub login).
 
 
 #### Installing the agent
