@@ -135,39 +135,8 @@ pattern, wrappedHandler := agent.ProfileHandler(pattern, handler)
 pattern, wrappedHandlerFunc := agent.ProfileHandlerFunc(pattern, handlerFunc)
 ```
 
-#### Measuring code segments
 
-*The use of Segment API is optional.*
-
-To measure the execution time of arbitrary parts of the application, the Segment API can be used.
-
-```go
-// Starts measurement of execution time of a code segment.
-// To stop measurement, call Stop on returned Segment object.
-// After calling Stop, the segment is recorded, aggregated and
-// reported with regular intervals.
-segment := agent.MeasureSegment("Segment1")
-defer segment.Stop()
-```
-
-```go
-// A helper function to measure HTTP handler execution by wrapping 
-// http.Handle method parameters.
-// Usage example:
-//   http.Handle(agent.MeasureHandler("/some-path", someHandler))
-pattern, wrappedHandler := agent.MeasureHandler(pattern, handler)
-```
-
-```go
-// A helper function to measure HTTP handler function execution 
-// by wrapping http.HandleFunc method parameters.
-// Usage example:
-//   http.HandleFunc(agent.MeasureHandlerFunc("/some-path", someHandlerFunc))
-pattern, wrappedHandlerFunc := agent.MeasureHandlerFunc(pattern, handlerFunc)
-```
-
-
-#### Monitoring errors
+#### Error reporting
 
 *The use of Error API is optional.*
 
