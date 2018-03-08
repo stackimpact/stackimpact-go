@@ -88,12 +88,12 @@ func (cl *ConfigLoader) load() {
 		}
 
 		if cl.agent.config.isAgentEnabled() {
-			cl.agent.segmentReporter.start()
+			cl.agent.spanReporter.start()
 			cl.agent.errorReporter.start()
 			cl.agent.processReporter.start()
 			cl.agent.log("Agent enabled")
 		} else {
-			cl.agent.segmentReporter.stop()
+			cl.agent.spanReporter.stop()
 			cl.agent.errorReporter.stop()
 			cl.agent.processReporter.stop()
 			cl.agent.log("Agent disabled")

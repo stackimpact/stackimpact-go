@@ -123,19 +123,22 @@ func waitForServer(url string) {
 	}
 }
 
-func BenchmarkMeasureSegment(b *testing.B) {
+func BenchmarkProfile(b *testing.B) {
 	agent := NewAgent()
 	agent.Start(Options{
 		AgentKey: "key1",
 		AppName:  "app1",
 	})
+	agent.internalAgent.Enable()
+
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		s := agent.MeasureSegment("seg1")
+		s := agent.Profile()
 		s.Stop()
 	}
 
-	// go test -v -run=^$ -bench=BenchmarkMeasureSegment -cpuprofile=cpu.out
+	// go test -v -run=^$ -bench=BenchmarkProfile -cpuprofile=cpu.out
 	// go tool pprof internal.test cpu.out
 }
 
@@ -145,8 +148,11 @@ func BenchmarkRecordError(b *testing.B) {
 		AgentKey: "key1",
 		AppName:  "app1",
 	})
+	agent.internalAgent.Enable()
 
 	err := errors.New("error1")
+
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		agent.RecordError(err)

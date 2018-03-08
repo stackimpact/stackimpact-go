@@ -201,7 +201,7 @@ func simulateProgrammaticProfiling() {
 func simulateWorkloadProfiling() {
 	// start HTTP server
 	go func() {
-		http.HandleFunc(agent.ProfileHandlerFunc("/some-handler-workload", func(w http.ResponseWriter, r *http.Request) {
+		http.HandleFunc(agent.ProfileHandlerFunc("/some-handler", func(w http.ResponseWriter, r *http.Request) {
 			for i := 0; i < 500000; i++ {
 				str := "str" + strconv.Itoa(i)
 				str = str + "a"
@@ -220,58 +220,7 @@ func simulateWorkloadProfiling() {
 	for {
 		select {
 		case <-requestTicker.C:
-			res, err := http.Get("http://localhost:5003/some-handler-workload")
-			if err == nil {
-				res.Body.Close()
-			}
-		}
-	}
-}
-
-func simulateSegments() {
-	for {
-		done1 := make(chan bool)
-
-		go func() {
-			segment := agent.MeasureSegment("Segment1")
-			defer segment.Stop()
-
-			time.Sleep(time.Duration(100+rand.Intn(20)) * time.Millisecond)
-
-			done1 <- true
-		}()
-
-		<-done1
-	}
-}
-
-func simulateHandlerSegments() {
-	// start HTTP server
-	go func() {
-		http.HandleFunc(agent.MeasureHandlerFunc("/some-handler-func", func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(time.Duration(200+rand.Intn(50)) * time.Millisecond)
-
-			fmt.Fprintf(w, "OK")
-		}))
-
-		http.Handle(agent.MeasureHandler("/some-handler", http.StripPrefix("/some-handler", http.FileServer(http.Dir("/tmp")))))
-
-		if err := http.ListenAndServe(":5001", nil); err != nil {
-			log.Fatal(err)
-			return
-		}
-	}()
-
-	requestTicker := time.NewTicker(1000 * time.Millisecond)
-	for {
-		select {
-		case <-requestTicker.C:
-			res, err := http.Get("http://localhost:5001/some-handler-func")
-			if err == nil {
-				res.Body.Close()
-			}
-
-			res, err = http.Get("http://localhost:5001/some-handler")
+			res, err := http.Get("http://localhost:5003/some-handler")
 			if err == nil {
 				res.Body.Close()
 			}
@@ -346,8 +295,6 @@ func main() {
 	go simulateLockWait()
 	go simulateProgrammaticProfiling()
 	go simulateWorkloadProfiling()
-	go simulateSegments()
-	go simulateHandlerSegments()
 	go simulateErrors()
 
 	select {}

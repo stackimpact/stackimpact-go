@@ -120,6 +120,13 @@ defer span.Stop();
 ```
 
 ```go
+// This method is similar to the Profile() method. It additionally
+// allows to specify a span name to group span timing measurements.
+span := agent.ProfileWithName(name);
+defer span.Stop();
+```
+
+```go
 // A helper function to profile HTTP handler execution by wrapping 
 // http.Handle method parameters.
 // Usage example:

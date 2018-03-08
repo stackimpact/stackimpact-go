@@ -156,7 +156,13 @@ func (a *Agent) Configure(agentKey string, appName string) {
 // overhead constraints. The method returns Span object, on
 // which the Stop() method should be called.
 func (a *Agent) Profile() *Span {
-	s := newSpan(a)
+	return a.ProfileWithName("Default")
+}
+
+// This method is similar to the Profile() method. It additionally
+// allows to specify a span name to group span timing measurements.
+func (a *Agent) ProfileWithName(name string) *Span {
+	s := newSpan(a, name)
 	s.start()
 
 	return s
@@ -166,13 +172,12 @@ func (a *Agent) Profile() *Span {
 // by wrapping http.HandleFunc method parameters.
 func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.ResponseWriter, *http.Request)) (string, func(http.ResponseWriter, *http.Request)) {
 	return pattern, func(w http.ResponseWriter, r *http.Request) {
-		span := newSpan(a)
-		span.workload = pattern
+		span := newSpan(a, fmt.Sprintf("Handler %s", pattern))
 		span.start()
 		defer span.Stop()
 
 		if span.active {
-			WithPprofLabel("workload", pattern, r, func() {
+			WithPprofLabel("workload", span.name, r, func() {
 				handlerFunc(w, r)
 			})
 		} else {
@@ -185,13 +190,12 @@ func (a *Agent) ProfileHandlerFunc(pattern string, handlerFunc func(http.Respons
 // by wrapping http.Handle method parameters.
 func (a *Agent) ProfileHandler(pattern string, handler http.Handler) (string, http.Handler) {
 	return pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		span := newSpan(a)
-		span.workload = pattern
+		span := newSpan(a, fmt.Sprintf("Handler %s", pattern))
 		span.start()
 		defer span.Stop()
 
 		if span.active {
-			WithPprofLabel("workload", pattern, r, func() {
+			WithPprofLabel("workload", span.name, r, func() {
 				handler.ServeHTTP(w, r)
 			})
 		} else {

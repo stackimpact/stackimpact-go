@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.5"
+const AgentVersion = "2.3.6"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
@@ -41,7 +41,7 @@ type Agent struct {
 	cpuReporter        *ProfileReporter
 	allocationReporter *ProfileReporter
 	blockReporter      *ProfileReporter
-	segmentReporter    *SegmentReporter
+	spanReporter       *SpanReporter
 	errorReporter      *ErrorReporter
 
 	profilerActive *Flag
@@ -78,7 +78,7 @@ func NewAgent() *Agent {
 		cpuReporter:        nil,
 		allocationReporter: nil,
 		blockReporter:      nil,
-		segmentReporter:    nil,
+		spanReporter:       nil,
 		errorReporter:      nil,
 
 		profilerActive: &Flag{},
@@ -136,7 +136,7 @@ func NewAgent() *Agent {
 	}
 	a.blockReporter = newProfileReporter(a, blockProfiler, blockProfilerConfig)
 
-	a.segmentReporter = newSegmentReporter(a)
+	a.spanReporter = newSpanReporter(a)
 	a.errorReporter = newErrorReporter(a)
 
 	return a
@@ -174,7 +174,7 @@ func (a *Agent) Enable() {
 		a.cpuReporter.start()
 		a.allocationReporter.start()
 		a.blockReporter.start()
-		a.segmentReporter.start()
+		a.spanReporter.start()
 		a.errorReporter.start()
 		a.processReporter.start()
 		a.config.setAgentEnabled(true)
@@ -187,7 +187,7 @@ func (a *Agent) Disable() {
 		a.cpuReporter.stop()
 		a.allocationReporter.stop()
 		a.blockReporter.stop()
-		a.segmentReporter.stop()
+		a.spanReporter.stop()
 		a.errorReporter.stop()
 		a.processReporter.stop()
 	}
@@ -210,12 +210,12 @@ func (a *Agent) StopProfiling() {
 	a.blockReporter.stopProfiling()
 }
 
-func (a *Agent) RecordSegment(name string, duration float64) {
+func (a *Agent) RecordSpan(name string, duration float64) {
 	if !agentStarted {
 		return
 	}
 
-	a.segmentReporter.recordSegment(name, duration)
+	a.spanReporter.recordSpan(name, duration)
 }
 
 func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {

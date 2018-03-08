@@ -29,5 +29,5 @@ func (s *Segment) start() {
 func (s *Segment) Stop() {
 	s.Duration = float64(time.Since(s.startTime).Nanoseconds()) / 1e6
 
-	s.agent.internalAgent.RecordSegment(s.Name, s.Duration)
+	s.agent.internalAgent.RecordSpan(s.Name, s.Duration)
 }

@@ -112,7 +112,7 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 		er.recordLock.Lock()
 		errorGraph, exists := er.errorGraphs[group]
 		if !exists {
-			// If segment was not created by other recordError call between locks, create it.
+			// If error was not created by other recordError call between locks, create it.
 			errorGraph = newBreakdownNode(group)
 			er.errorGraphs[group] = errorGraph
 		}
