@@ -98,7 +98,7 @@ func main() {
 		AppEnvironment: "production",
 	})
 
-	http.HandleFunc("/", handler) 
+	http.HandleFunc(agent.ProfileHandlerFunc("/", handler)) 
 	http.ListenAndServe(":8080", nil)
 }
 ```
@@ -107,7 +107,7 @@ func main() {
 
 *The use of programmatic profiling is optional.*
 
-Programmatic profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the `agent.Profile()` method can be used.
+Programmatic profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the following methods can be used. In addition to more precise profiling, timing information will also be reported for the profiled spans.
 
 ```go
 // Use this method to instruct the agent to start and stop 
