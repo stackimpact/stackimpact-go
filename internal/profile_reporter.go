@@ -45,7 +45,7 @@ type ProfileReporter struct {
 	spanActive            *Flag
 	spanStart             int64
 	spanTimeout           *Timer
-	spanTrigger string
+	spanTrigger           string
 	workloads             map[string]int64
 }
 
@@ -64,7 +64,7 @@ func newProfileReporter(agent *Agent, profiler Profiler, config *ProfilerConfig)
 		spanActive:            &Flag{},
 		spanStart:             0,
 		spanTimeout:           nil,
-		spanTrigger: "",
+		spanTrigger:           "",
 		workloads:             nil,
 	}
 
