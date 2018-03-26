@@ -60,7 +60,7 @@ const UnitKilobyte string = "kilobyte"
 const UnitPercent string = "percent"
 
 const TriggerTimer string = "timer"
-const TriggerAnomaly string = "anomaly"
+const TriggerAPI string = "api"
 
 const ReservoirSize int = 1000
 

@@ -105,8 +105,6 @@ func main() {
 
 #### Programmatic profiling
 
-*The use of programmatic profiling is optional.*
-
 Programmatic profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the following methods can be used. In addition to more precise profiling, timing information will also be reported for the profiled spans.
 
 ```go
@@ -144,9 +142,6 @@ pattern, wrappedHandlerFunc := agent.ProfileHandlerFunc(pattern, handlerFunc)
 
 
 #### Error reporting
-
-*The use of Error API is optional.*
-
 
 To monitor exceptions and panics with stack traces, the error recording API can be used.
 

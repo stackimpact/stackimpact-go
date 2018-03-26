@@ -45,6 +45,7 @@ type ProfileReporter struct {
 	spanActive            *Flag
 	spanStart             int64
 	spanTimeout           *Timer
+	spanTrigger string
 	workloads             map[string]int64
 }
 
@@ -63,6 +64,7 @@ func newProfileReporter(agent *Agent, profiler Profiler, config *ProfilerConfig)
 		spanActive:            &Flag{},
 		spanStart:             0,
 		spanTimeout:           nil,
+		spanTrigger: "",
 		workloads:             nil,
 	}
 
@@ -112,10 +114,11 @@ func (pr *ProfileReporter) reset() {
 	pr.profileStartTimestamp = time.Now().Unix()
 	pr.profileDuration = 0
 	pr.spanCount = 0
+	pr.spanTrigger = TriggerTimer
 	pr.workloads = make(map[string]int64)
 }
 
-func (pr *ProfileReporter) startProfiling(rateLimit bool, workload string) bool {
+func (pr *ProfileReporter) startProfiling(apiCall bool, workload string) bool {
 	if !pr.started.IsSet() {
 		return false
 	}
@@ -128,7 +131,7 @@ func (pr *ProfileReporter) startProfiling(rateLimit bool, workload string) bool 
 		return false
 	}
 
-	if rateLimit && pr.spanCount >= pr.config.maxSpanCount {
+	if apiCall && pr.spanCount >= pr.config.maxSpanCount {
 		pr.agent.log("%v: max profiling span count reached.", pr.config.logPrefix)
 		return false
 	}
@@ -154,6 +157,10 @@ func (pr *ProfileReporter) startProfiling(rateLimit bool, workload string) bool 
 	pr.spanCount++
 	pr.spanActive.Set()
 	pr.spanStart = time.Now().UnixNano()
+
+	if apiCall {
+		pr.spanTrigger = TriggerAPI
+	}
 
 	if workload != "" {
 		if _, ok := pr.workloads[workload]; ok {
@@ -218,7 +225,7 @@ func (pr *ProfileReporter) report() {
 
 	for _, d := range profileData {
 		metric := newMetric(pr.agent, TypeProfile, d.category, d.name, d.unit)
-		metric.createMeasurement(TriggerTimer, d.profile.measurement, d.unitInterval, d.profile)
+		metric.createMeasurement(pr.spanTrigger, d.profile.measurement, d.unitInterval, d.profile)
 		pr.agent.messageQueue.addMessage("metric", metric.toMap())
 	}
 
