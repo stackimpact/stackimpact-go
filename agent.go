@@ -150,6 +150,31 @@ func (a *Agent) Configure(agentKey string, appName string) {
 	})
 }
 
+// Start CPU profiler. Automatic profiling should be disabled.
+func (a *Agent) StartCPUProfiler() {
+	a.internalAgent.StartCPUProfiler()
+}
+
+// Stop CPU profiler and report the recorded profile to the Dashboard.
+func (a *Agent) StopCPUProfiler() {
+	a.internalAgent.StopCPUProfiler()
+}
+
+// Start blocking call profiler. Automatic profiling should be disabled.
+func (a *Agent) StartBlockProfiler() {
+	a.internalAgent.StartBlockProfiler()
+}
+
+// Stop blocking call profiler and report the recorded profile to the Dashboard.
+func (a *Agent) StopBlockProfiler() {
+	a.internalAgent.StopBlockProfiler()
+}
+
+// Report current allocation profile to the Dashboard.
+func (a *Agent) ReportAllocationProfile() {
+	a.internalAgent.ReportAllocationProfile()
+}
+
 // Use this method to instruct the agent to start and stop
 // profiling. It does not guarantee that any profiler will be
 // started. The decision is made by the agent based on the
@@ -259,7 +284,7 @@ func (a *Agent) RecordAndRecoverPanic() {
 	}
 }
 
-// Reports profiles to the dashboard in manual profiling mode.
+// Reports profiles to the Dashboard in manual or programmatic profiling mode.
 // Only reports once every few minutes and only if the agent is active.
 func (a *Agent) Report() {
 	a.ReportWithHTTPClient(nil)

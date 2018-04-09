@@ -20,7 +20,7 @@ Learn more on the [features](https://stackimpact.com/features/) page (with scree
 
 #### How it works
 
-The StackImpact profiler agent is imported into a program and used as a normal package. When the program runs, various sampling profilers are started and stopped automatically by the agent and/or programmatically using the agent methods. The agent periodically reports recorded profiles and metrics to the StackImpact Dashboard. If an application has multiple processes, also referred to as workers, instances or nodes, only one or two processes will have active agents at any point of time.
+The StackImpact profiler agent is imported into a program and used as a normal package. When the program runs, various sampling profilers are started and stopped automatically by the agent and/or programmatically using the agent methods. The agent periodically reports recorded profiles and metrics to the StackImpact Dashboard. If an application has multiple processes, also referred to as workers, instances or nodes, only one or two processes will have active agents at any point of time. The agent can also operate in manual mode, which should be used in development only.
 
 
 #### Documentation
@@ -73,13 +73,12 @@ All initialization options:
 * `HostName` (Optional) By default, host name will be the OS hostname.
 * `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
 * `HTTPClient` (Optional) An `http.Client` instance to be used instead of the default client for reporting data to Dashboard servers.
-* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. `agent.Profile()` and `agent.Report()` should be used instead. Useful for environments without support for timers or background tasks.
+* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. Manual or programmatic profiling should be used instead. Useful for environments without support for timers or background tasks.
 * `Debug` (Optional) Enables debug logging.
 * `Logger` (Optional) A `log.Logger` instance to be used instead of default `STDOUT` logger.
 
 
-
-Example:
+#### Basic example
 
 ```go
 package main
@@ -107,6 +106,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 ```
+
 
 #### Programmatic profiling
 
@@ -170,6 +170,39 @@ Recording and recovering from panics:
 // Aggregates and reports panics with regular intervals. This function also
 // recovers from panics.
 defer agent.RecordAndRecoverPanic()
+```
+
+
+#### Manual profiling
+
+*Manual profiling should not be used in production!*
+
+By default, the agent starts and stops profiling automatically. Manual profiling allows to start and stop profilers directly. It is suitable for profiling short-lived programs and should not be used for long-running production applications. Automatic profiling should be disabled with `DisableAutoProfiling: true`.
+
+```go
+// Start CPU profiler.
+agent.StartCPUProfiler();
+```
+
+```go
+// Stop CPU profiler and report the recorded profile to the Dashboard.
+// Automatic profiling should be disabled.
+agent.StopCPUProfiler();
+```
+
+```go
+// Start blocking call profiler.
+agent.StartBlockProfiler();
+```
+
+```go
+// Stop blocking call profiler and report the recorded profile to the Dashboard.
+agent.StopBlockProfiler();
+```
+
+```go
+// Report current allocation profile to the Dashboard.
+agent.ReportAllocationProfile();
 ```
 
 

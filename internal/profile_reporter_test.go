@@ -61,7 +61,7 @@ func TestMaxDuration(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true, "")
+	rep.startProfiling(true, true, "")
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
@@ -74,7 +74,7 @@ func TestMaxDuration(t *testing.T) {
 
 	rep.profileDuration = 21 * 1e9
 
-	rep.startProfiling(true, "")
+	rep.startProfiling(true, true, "")
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -100,14 +100,14 @@ func TestMaxSpanCount(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true, "")
+	rep.startProfiling(true, true, "")
 	rep.stopProfiling()
 
 	if prof.startCount != 1 {
 		t.Errorf("Start count is not 1")
 	}
 
-	rep.startProfiling(true, "")
+	rep.startProfiling(true, true, "")
 	rep.stopProfiling()
 
 	if prof.startCount > 1 {
@@ -133,11 +133,11 @@ func TestReportProfile(t *testing.T) {
 	rep := newProfileReporter(agent, prof, conf)
 	rep.start()
 
-	rep.startProfiling(true, "")
+	rep.startProfiling(true, true, "")
 	time.Sleep(10 * time.Millisecond)
 	rep.stopProfiling()
 
-	rep.report()
+	rep.report(false)
 
 	if !prof.closed {
 		t.Error("Should be closed")

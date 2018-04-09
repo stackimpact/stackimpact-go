@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.7"
+const AgentVersion = "2.3.8"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
@@ -197,9 +197,9 @@ func (a *Agent) StartProfiling(workload string) bool {
 	defer a.recoverAndLog()
 
 	if rand.Intn(2) == 0 {
-		return a.cpuReporter.startProfiling(true, workload) || a.blockReporter.startProfiling(true, workload)
+		return a.cpuReporter.startProfiling(true, true, workload) || a.blockReporter.startProfiling(true, true, workload)
 	} else {
-		return a.blockReporter.startProfiling(true, workload) || a.cpuReporter.startProfiling(true, workload)
+		return a.blockReporter.startProfiling(true, true, workload) || a.cpuReporter.startProfiling(true, true, workload)
 	}
 }
 
@@ -208,6 +208,68 @@ func (a *Agent) StopProfiling() {
 
 	a.cpuReporter.stopProfiling()
 	a.blockReporter.stopProfiling()
+}
+
+func (a *Agent) StartCPUProfiler() {
+	if !agentStarted || a.AutoProfiling {
+		return
+	}
+
+	defer a.recoverAndLog()
+
+	a.cpuReporter.start()
+	a.cpuReporter.startProfiling(true, false, "")
+}
+
+func (a *Agent) StopCPUProfiler() {
+	if !agentStarted || a.AutoProfiling {
+		return
+	}
+
+	defer a.recoverAndLog()
+
+	a.cpuReporter.stopProfiling()
+	a.cpuReporter.report(false)
+	a.cpuReporter.stop()
+	a.messageQueue.flush(false)
+}
+
+func (a *Agent) StartBlockProfiler() {
+	if !agentStarted || a.AutoProfiling {
+		return
+	}
+
+	defer a.recoverAndLog()
+
+	a.blockReporter.start()
+	a.blockReporter.startProfiling(true, false, "")
+}
+
+func (a *Agent) StopBlockProfiler() {
+	if !agentStarted || a.AutoProfiling {
+		return
+	}
+
+	defer a.recoverAndLog()
+
+	a.blockReporter.stopProfiling()
+	a.blockReporter.report(false)
+	a.blockReporter.stop()
+	a.messageQueue.flush(false)
+}
+
+func (a *Agent) ReportAllocationProfile() {
+	if !agentStarted || a.AutoProfiling {
+		return
+	}
+
+	defer a.recoverAndLog()
+
+	a.allocationReporter.start()
+	a.allocationReporter.spanTrigger = TriggerAPI
+	a.allocationReporter.report(false)
+	a.allocationReporter.stop()
+	a.messageQueue.flush(false)
 }
 
 func (a *Agent) RecordSpan(name string, duration float64) {
@@ -235,7 +297,7 @@ func (a *Agent) RecordError(group string, msg interface{}, skipFrames int) {
 }
 
 func (a *Agent) Report() {
-	if a.AutoProfiling {
+	if !agentStarted || a.AutoProfiling {
 		return
 	}
 
@@ -244,11 +306,11 @@ func (a *Agent) Report() {
 	a.configLoader.load()
 
 	if !a.AutoProfiling {
-		a.cpuReporter.report()
-		a.allocationReporter.report()
-		a.blockReporter.report()
+		a.cpuReporter.report(true)
+		a.allocationReporter.report(true)
+		a.blockReporter.report(true)
 
-		a.messageQueue.flush()
+		a.messageQueue.flush(true)
 	}
 }
 

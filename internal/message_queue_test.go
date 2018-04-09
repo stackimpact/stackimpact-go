@@ -62,7 +62,7 @@ func TestFlush(t *testing.T) {
 	}
 	agent.messageQueue.addMessage("test", msg)
 
-	agent.messageQueue.flush()
+	agent.messageQueue.flush(false)
 
 	if len(agent.messageQueue.queue) > 0 {
 		t.Errorf("Should have no messages, but has %v", len(agent.messageQueue.queue))
@@ -92,7 +92,7 @@ func TestFlushFail(t *testing.T) {
 	}
 	agent.messageQueue.addMessage("test", msg)
 
-	agent.messageQueue.flush()
+	agent.messageQueue.flush(false)
 
 	if len(agent.messageQueue.queue) != 2 {
 		t.Errorf("Should have 2 messages, but has %v", len(agent.messageQueue.queue))

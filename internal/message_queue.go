@@ -52,7 +52,7 @@ func (mq *MessageQueue) start() {
 
 	if mq.agent.AutoProfiling {
 		mq.flushTimer = mq.agent.createTimer(0, time.Duration(mq.FlushInterval)*time.Second, func() {
-			mq.flush()
+			mq.flush(false)
 		})
 	}
 }
@@ -116,9 +116,9 @@ func (mq *MessageQueue) addMessage(topic string, message map[string]interface{})
 	mq.expire()
 }
 
-func (mq *MessageQueue) flush() {
+func (mq *MessageQueue) flush(withInterval bool) {
 	now := time.Now().Unix()
-	if !mq.agent.AutoProfiling && mq.lastFlushTimestamp > now-mq.FlushInterval {
+	if withInterval && mq.lastFlushTimestamp > now-mq.FlushInterval {
 		return
 	}
 

@@ -85,12 +85,12 @@ func (pr *ProfileReporter) start() {
 		if !pr.config.reportOnly {
 			pr.spanTimer = pr.agent.createTimer(0, time.Duration(pr.config.spanInterval)*time.Second, func() {
 				time.Sleep(time.Duration(rand.Int63n(pr.config.spanInterval-pr.config.maxSpanDuration)) * time.Second)
-				pr.startProfiling(false, "")
+				pr.startProfiling(false, true, "")
 			})
 		}
 
 		pr.reportTimer = pr.agent.createTimer(0, time.Duration(pr.config.reportInterval)*time.Second, func() {
-			pr.report()
+			pr.report(false)
 		})
 	}
 }
@@ -118,7 +118,7 @@ func (pr *ProfileReporter) reset() {
 	pr.workloads = make(map[string]int64)
 }
 
-func (pr *ProfileReporter) startProfiling(apiCall bool, workload string) bool {
+func (pr *ProfileReporter) startProfiling(apiCall bool, withTimeout bool, workload string) bool {
 	if !pr.started.IsSet() {
 		return false
 	}
@@ -150,9 +150,11 @@ func (pr *ProfileReporter) startProfiling(apiCall bool, workload string) bool {
 		return false
 	}
 
-	pr.spanTimeout = pr.agent.createTimer(time.Duration(pr.config.maxSpanDuration)*time.Second, 0, func() {
-		pr.stopProfiling()
-	})
+	if withTimeout {
+		pr.spanTimeout = pr.agent.createTimer(time.Duration(pr.config.maxSpanDuration)*time.Second, 0, func() {
+			pr.stopProfiling()
+		})
+	}
 
 	pr.spanCount++
 	pr.spanActive.Set()
@@ -180,7 +182,10 @@ func (pr *ProfileReporter) stopProfiling() {
 	if !pr.spanActive.UnsetIfSet() {
 		return
 	}
-	pr.spanTimeout.Stop()
+
+	if pr.spanTimeout != nil {
+		pr.spanTimeout.Stop()
+	}
 
 	defer pr.agent.profilerActive.Unset()
 
@@ -194,7 +199,7 @@ func (pr *ProfileReporter) stopProfiling() {
 	pr.profileDuration += time.Now().UnixNano() - pr.spanStart
 }
 
-func (pr *ProfileReporter) report() {
+func (pr *ProfileReporter) report(withInterval bool) {
 	if !pr.started.IsSet() {
 		return
 	}
@@ -202,7 +207,7 @@ func (pr *ProfileReporter) report() {
 	pr.profileLock.Lock()
 	defer pr.profileLock.Unlock()
 
-	if !pr.agent.AutoProfiling {
+	if withInterval {
 		if pr.profileStartTimestamp > time.Now().Unix()-pr.config.reportInterval {
 			return
 		} else if pr.profileStartTimestamp < time.Now().Unix()-2*pr.config.reportInterval {
