@@ -284,7 +284,7 @@ func (a *Agent) RecordAndRecoverPanic() {
 	}
 }
 
-// Reports profiles to the Dashboard in manual or programmatic profiling mode.
+// Reports profiles to the Dashboard in manual or focused profiling mode.
 // Only reports once every few minutes and only if the agent is active.
 func (a *Agent) Report() {
 	a.ReportWithHTTPClient(nil)

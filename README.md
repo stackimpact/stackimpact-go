@@ -73,7 +73,7 @@ All initialization options:
 * `HostName` (Optional) By default, host name will be the OS hostname.
 * `ProxyAddress` (Optional) Proxy server URL to use when connecting to the Dashboard servers.
 * `HTTPClient` (Optional) An `http.Client` instance to be used instead of the default client for reporting data to Dashboard servers.
-* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. Manual or programmatic profiling should be used instead. Useful for environments without support for timers or background tasks.
+* `DisableAutoProfiling` (Optional) If set to `true`, disables the default automatic profiling and reporting. Focused or manual profiling should be used instead. Useful for environments without support for timers or background tasks.
 * `Debug` (Optional) Enables debug logging.
 * `Logger` (Optional) A `log.Logger` instance to be used instead of default `STDOUT` logger.
 
@@ -108,9 +108,9 @@ func main() {
 ```
 
 
-#### Programmatic profiling
+#### Focused profiling
 
-Programmatic profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the following methods can be used. In addition to more precise profiling, timing information will also be reported for the profiled spans.
+Focused profiling is suitable for repeating code, such as request or event handlers. By default, the agent starts and stops profiling automatically. In order to make sure the agent profiles the most relevant execution intervals, the following methods can be used. In addition to more precise profiling, timing information will also be reported for the profiled spans.
 
 ```go
 // Use this method to instruct the agent to start and stop 

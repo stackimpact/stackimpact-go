@@ -178,10 +178,10 @@ func simulateLockWait() {
 	}
 }
 
-func simulateProgrammaticProfiling() {
+func simulateFocusedProfiling() {
 	for {
 		span := agent.Profile()
-		fmt.Println("Programmatic profile started")
+		fmt.Println("Focused profile started")
 
 		// wait
 		time.Sleep(time.Duration(10+rand.Intn(10)) * time.Millisecond)
@@ -192,7 +192,7 @@ func simulateProgrammaticProfiling() {
 		}
 
 		span.Stop()
-		fmt.Println("Programmatic profile stopped")
+		fmt.Println("Focused profile stopped")
 
 		time.Sleep(20 * time.Second)
 	}
@@ -293,7 +293,7 @@ func main() {
 	go simulateNetworkWait()
 	go simulateSyscallWait()
 	go simulateLockWait()
-	go simulateProgrammaticProfiling()
+	go simulateFocusedProfiling()
 	go simulateWorkloadProfiling()
 	go simulateErrors()
 
