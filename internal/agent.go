@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.8"
+const AgentVersion = "2.3.9"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")

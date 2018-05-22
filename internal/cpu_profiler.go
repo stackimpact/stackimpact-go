@@ -38,7 +38,8 @@ func newCPUProfiler(agent *Agent) *CPUProfiler {
 }
 
 func (cp *CPUProfiler) reset() {
-	cp.profile = newBreakdownNode("root")
+	cp.profile = newBreakdownNode("CPU call graph")
+	cp.profile.setType(BreakdownTypeCallgraph)
 	cp.labelProfiles = make(map[string]*BreakdownNode)
 }
 
@@ -160,6 +161,7 @@ func (cp *CPUProfiler) updateCPUProfile(p *profile.Profile) error {
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.setType(BreakdownTypeCallsite)
 		}
 
 		currentNode.increment(stackDuration, stackSamples)
@@ -177,6 +179,7 @@ func (cp *CPUProfiler) updateCPUProfile(p *profile.Profile) error {
 
 				frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 				currentNode = currentNode.findOrAddChild(frameName)
+				currentNode.setType(BreakdownTypeCallsite)
 			}
 
 			currentNode.increment(stackDuration, stackSamples)

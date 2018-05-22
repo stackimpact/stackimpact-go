@@ -62,6 +62,10 @@ const UnitPercent string = "percent"
 const TriggerTimer string = "timer"
 const TriggerAPI string = "api"
 
+const BreakdownTypeCallgraph string = "callgraph"
+const BreakdownTypeCallsite string = "callsite"
+const BreakdownTypeError string = "error"
+
 const ReservoirSize int = 1000
 
 type filterFuncType func(name string) bool
@@ -80,6 +84,8 @@ func (r Reservoir) Less(i, j int) bool {
 
 type BreakdownNode struct {
 	name        string
+	typ         string
+	metadata    map[string]string
 	measurement float64
 	numSamples  int64
 	counter     int64
@@ -91,6 +97,8 @@ type BreakdownNode struct {
 func newBreakdownNode(name string) *BreakdownNode {
 	bn := &BreakdownNode{
 		name:        name,
+		typ:         "",
+		metadata:    make(map[string]string),
 		measurement: 0,
 		numSamples:  0,
 		counter:     0,
@@ -100,6 +108,22 @@ func newBreakdownNode(name string) *BreakdownNode {
 	}
 
 	return bn
+}
+
+func (bn *BreakdownNode) setType(typ string) {
+	bn.typ = typ
+}
+
+func (bn *BreakdownNode) addMetadata(key, string, val string) {
+	bn.metadata[key] = val
+}
+
+func (bn *BreakdownNode) getMetadata(key string) (string, bool) {
+	if val, exists := bn.metadata[key]; exists {
+		return val, true
+	} else {
+		return "", false
+	}
 }
 
 func (bn *BreakdownNode) findChild(name string) *BreakdownNode {
@@ -329,9 +353,14 @@ func (bn *BreakdownNode) toMap() map[string]interface{} {
 
 	nodeMap := map[string]interface{}{
 		"name":        bn.name,
+		"metadata":    bn.metadata,
 		"measurement": bn.measurement,
 		"num_samples": bn.numSamples,
 		"children":    childrenMap,
+	}
+
+	if bn.typ != "" {
+		nodeMap["type"] = bn.typ
 	}
 
 	return nodeMap

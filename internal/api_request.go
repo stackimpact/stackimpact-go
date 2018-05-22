@@ -44,6 +44,11 @@ func (ar *APIRequest) post(endpoint string, payload map[string]interface{}) (map
 		"payload":         payload,
 	}
 
+	gopath, exists := os.LookupEnv("GOPATH")
+	if exists {
+		reqBody["runtime_path"] = gopath
+	}
+
 	reqBodyJson, _ := json.Marshal(reqBody)
 
 	var buf bytes.Buffer

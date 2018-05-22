@@ -38,8 +38,11 @@ func newBlockProfiler(agent *Agent) *BlockProfiler {
 }
 
 func (bp *BlockProfiler) reset() {
-	bp.blockProfile = newBreakdownNode("root")
-	bp.blockTrace = newBreakdownNode("root")
+	bp.blockProfile = newBreakdownNode("Block call graph")
+	bp.blockProfile.setType(BreakdownTypeCallgraph)
+
+	bp.blockTrace = newBreakdownNode("Block call graph")
+	bp.blockTrace.setType(BreakdownTypeCallgraph)
 }
 
 func (bp *BlockProfiler) startProfiler() error {
@@ -141,6 +144,7 @@ func (bp *BlockProfiler) updateBlockProfile(p *profile.Profile) error {
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.setType(BreakdownTypeCallsite)
 		}
 		currentNode.increment(delay, contentions)
 
@@ -155,6 +159,7 @@ func (bp *BlockProfiler) updateBlockProfile(p *profile.Profile) error {
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.setType(BreakdownTypeCallsite)
 		}
 		currentNode.updateP95(delay / float64(contentions))
 	}

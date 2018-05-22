@@ -1,6 +1,13 @@
 package internal
 
 import (
+	"compress/gzip"
+	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,6 +57,107 @@ func TestStartStopProfiling(t *testing.T) {
 
 	if agent.cpuReporter.profileDuration == 0 {
 		t.Error("profileDuration should be > 0")
+	}
+}
+
+func TestManualCPUProfiler(t *testing.T) {
+	payload := make(chan string)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		zr, _ := gzip.NewReader(r.Body)
+		body, _ := ioutil.ReadAll(zr)
+		payload <- string(body)
+		fmt.Fprintf(w, "{}")
+	}))
+	defer server.Close()
+
+	agent := NewAgent()
+	agent.Debug = true
+	agent.AutoProfiling = false
+	agent.ProfileAgent = true
+	agent.DashboardAddress = server.URL
+
+	go func() {
+		agent.StartCPUProfiler()
+
+		for i := 0; i < 10000000; i++ {
+			rand.Intn(1000)
+		}
+
+		agent.StopCPUProfiler()
+	}()
+
+	payloadJson := <-payload
+	if !strings.Contains(payloadJson, "TestManualCPUProfiler") {
+		t.Error("The test function is not found in the payload")
+	}
+}
+
+func TestManualBlockProfiler(t *testing.T) {
+	payload := make(chan string)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		zr, _ := gzip.NewReader(r.Body)
+		body, _ := ioutil.ReadAll(zr)
+		payload <- string(body)
+		fmt.Fprintf(w, "{}")
+	}))
+	defer server.Close()
+
+	agent := NewAgent()
+	agent.Debug = true
+	agent.AutoProfiling = false
+	agent.ProfileAgent = true
+	agent.DashboardAddress = server.URL
+
+	go func() {
+		agent.StartBlockProfiler()
+
+		wait := make(chan bool)
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			wait <- true
+		}()
+		<-wait
+
+		agent.StopBlockProfiler()
+	}()
+
+	payloadJson := <-payload
+	if !strings.Contains(payloadJson, "TestManualBlockProfiler") {
+		t.Error("The test function is not found in the payload")
+	}
+}
+
+func TestManualAllocationProfiler(t *testing.T) {
+	payload := make(chan string)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		zr, _ := gzip.NewReader(r.Body)
+		body, _ := ioutil.ReadAll(zr)
+		payload <- string(body)
+		fmt.Fprintf(w, "{}")
+	}))
+	defer server.Close()
+
+	agent := NewAgent()
+	agent.Debug = true
+	agent.AutoProfiling = false
+	agent.ProfileAgent = true
+	agent.DashboardAddress = server.URL
+
+	go func() {
+		objs = make([]string, 0)
+		for i := 0; i < 100000; i++ {
+			objs = append(objs, string(i))
+		}
+
+		agent.ReportAllocationProfile()
+	}()
+
+	payloadJson := <-payload
+	if !strings.Contains(payloadJson, "TestManualAllocationProfiler") {
+		t.Error("The test function is not found in the payload")
 	}
 }
 

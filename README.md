@@ -8,7 +8,7 @@ StackImpact is a production-grade performance profiler built for both production
 
 #### Features
 
-* Continuous hot spot profiling for CPU usage, memory allocation, blocking calls.
+* Continuous hot spot profiling of CPU usage, memory allocation and blocking calls.
 * Continuous latency bottleneck tracing.
 * Error and panic monitoring.
 * Health monitoring including CPU, memory, garbage collection and other runtime metrics.
@@ -20,7 +20,7 @@ Learn more on the [features](https://stackimpact.com/features/) page (with scree
 
 #### How it works
 
-The StackImpact profiler agent is imported into a program and used as a normal package. When the program runs, various sampling profilers are started and stopped automatically by the agent and/or programmatically using the agent methods. The agent periodically reports recorded profiles and metrics to the StackImpact Dashboard. If an application has multiple processes, also referred to as workers, instances or nodes, only one or two processes will have active agents at any point of time. The agent can also operate in manual mode, which should be used in development only.
+The StackImpact profiler agent is imported into a program and used as a normal package. When the program runs, various sampling profilers are started and stopped automatically by the agent and/or programmatically using the agent methods. The agent periodically reports recorded profiles and metrics to the StackImpact Dashboard. If an application has multiple processes, also referred to as workers, instances or nodes, only one process will have an active agent at any point of time. The agent can also operate in manual mode, which should be used in development only.
 
 
 #### Documentation

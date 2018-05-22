@@ -69,6 +69,7 @@ func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode,
 	for i := len(frames) - 1; i >= 0; i-- {
 		f := frames[i]
 		currentNode = currentNode.findOrAddChild(f)
+		currentNode.setType(BreakdownTypeCallsite)
 		currentNode.updateCounter(1, 0)
 	}
 
@@ -84,6 +85,7 @@ func (er *ErrorReporter) incrementError(group string, errorGraph *BreakdownNode,
 			messageNode = currentNode.findOrAddChild("Other")
 		}
 	}
+	messageNode.setType(BreakdownTypeError)
 	messageNode.updateCounter(1, 0)
 }
 
@@ -114,6 +116,7 @@ func (er *ErrorReporter) recordError(group string, err error, skip int) {
 		if !exists {
 			// If error was not created by other recordError call between locks, create it.
 			errorGraph = newBreakdownNode(group)
+			errorGraph.setType(BreakdownTypeCallgraph)
 			er.errorGraphs[group] = errorGraph
 		}
 		er.recordLock.Unlock()

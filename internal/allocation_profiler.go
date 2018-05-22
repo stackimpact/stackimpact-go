@@ -109,7 +109,8 @@ func (ap *AllocationProfiler) createAllocationCallGraph(p *profile.Profile) (*Br
 	}
 
 	// build call graph
-	rootNode := newBreakdownNode("root")
+	rootNode := newBreakdownNode("Allocation call graph")
+	rootNode.setType(BreakdownTypeCallgraph)
 
 	for _, s := range p.Sample {
 		if !ap.agent.ProfileAgent && isAgentStack(s) {
@@ -133,6 +134,7 @@ func (ap *AllocationProfiler) createAllocationCallGraph(p *profile.Profile) (*Br
 
 			frameName := fmt.Sprintf("%v (%v:%v)", funcName, fileName, fileLine)
 			currentNode = currentNode.findOrAddChild(frameName)
+			currentNode.setType(BreakdownTypeCallsite)
 		}
 		currentNode.increment(float64(value), int64(count))
 	}
