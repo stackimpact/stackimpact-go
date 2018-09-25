@@ -42,6 +42,11 @@ func (s *Span) Stop() {
 		if s.active {
 			s.agent.internalAgent.StopProfiling()
 		}
+
+		if !s.agent.internalAgent.AutoProfiling {
+			s.agent.internalAgent.Report()
+		}
+
 		atomic.StoreInt32(&s.agent.spanStarted, 0)
 	}
 }

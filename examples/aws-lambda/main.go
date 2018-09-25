@@ -18,9 +18,6 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	span := agent.Profile()
 	defer span.Stop()
 
-	// periodically send profiles to the sashboard (not on every request)
-	defer agent.Report()
-
 	// simulate cpu work
 	for i := 0; i < 1000000; i++ {
 		rand.Intn(1000)

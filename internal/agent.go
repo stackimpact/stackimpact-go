@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const AgentVersion = "2.3.9"
+const AgentVersion = "2.3.10"
 const SAASDashboardAddress = "https://agent-api.stackimpact.com"
 
 var agentPath = filepath.Join("github.com", "stackimpact", "stackimpact-go")
@@ -305,13 +305,11 @@ func (a *Agent) Report() {
 
 	a.configLoader.load()
 
-	if !a.AutoProfiling {
-		a.cpuReporter.report(true)
-		a.allocationReporter.report(true)
-		a.blockReporter.report(true)
+	a.cpuReporter.report(true)
+	a.allocationReporter.report(true)
+	a.blockReporter.report(true)
 
-		a.messageQueue.flush(true)
-	}
+	a.messageQueue.flush(true)
 }
 
 func (a *Agent) log(format string, values ...interface{}) {

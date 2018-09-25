@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/stackimpact/stackimpact-go/internal"
 )
@@ -31,8 +30,7 @@ type Options struct {
 type Agent struct {
 	internalAgent *internal.Agent
 
-	spanStarted   int32
-	reportStarted int32
+	spanStarted int32
 
 	// compatibility < 1.2.0
 	DashboardAddress string
@@ -47,7 +45,6 @@ func NewAgent() *Agent {
 	a := &Agent{
 		internalAgent: internal.NewAgent(),
 		spanStarted:   0,
-		reportStarted: 0,
 	}
 
 	return a
@@ -284,24 +281,10 @@ func (a *Agent) RecordAndRecoverPanic() {
 	}
 }
 
-// Reports profiles to the Dashboard in manual or focused profiling mode.
-// Only reports once every few minutes and only if the agent is active.
+// DEPRECATED. Kept for compatibility.
 func (a *Agent) Report() {
-	a.ReportWithHTTPClient(nil)
 }
 
-// Same as Report, but uses given http.Client.
+// DEPRECATED. Kept for compatibility.
 func (a *Agent) ReportWithHTTPClient(client *http.Client) {
-	if !atomic.CompareAndSwapInt32(&a.reportStarted, 0, 1) {
-		return
-	}
-	defer func() {
-		atomic.StoreInt32(&a.reportStarted, 0)
-	}()
-
-	if client != nil {
-		a.internalAgent.HTTPClient = client
-	}
-
-	a.internalAgent.Report()
 }
