@@ -79,16 +79,18 @@ func TestManualCPUProfiler(t *testing.T) {
 
 	go func() {
 		agent.StartCPUProfiler()
+		time.Sleep(250 * time.Millisecond)
 
 		for i := 0; i < 10000000; i++ {
 			rand.Intn(1000)
 		}
 
+		time.Sleep(250 * time.Millisecond)
 		agent.StopCPUProfiler()
 	}()
 
 	payloadJson := <-payload
-	if !strings.Contains(payloadJson, "TestManualCPUProfiler") {
+	if !strings.Contains(payloadJson, "Intn") {
 		t.Error("The test function is not found in the payload")
 	}
 }
@@ -112,16 +114,22 @@ func TestManualBlockProfiler(t *testing.T) {
 
 	go func() {
 		agent.StartBlockProfiler()
+		time.Sleep(250 * time.Millisecond)
 
 		wait := make(chan bool)
-		go func() {
-			time.Sleep(150 * time.Millisecond)
-			wait <- true
-		}()
-		<-wait
+
+		for i := 0; i < 10; i++ {
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				wait <- true
+			}()
+			<-wait
+		}
 
 		agent.StopBlockProfiler()
 	}()
+
+	time.Sleep(250 * time.Millisecond)
 
 	payloadJson := <-payload
 	if !strings.Contains(payloadJson, "TestManualBlockProfiler") {

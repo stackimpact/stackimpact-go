@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 var objs []string
@@ -23,6 +24,8 @@ func TestCreateAllocationCallGraph(t *testing.T) {
 	runtime.GC()
 
 	allocationProfiler := newAllocationProfiler(agent)
+
+	time.Sleep(250 * time.Millisecond)
 
 	p, _ := allocationProfiler.readHeapProfile()
 
